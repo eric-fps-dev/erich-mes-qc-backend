@@ -4,6 +4,13 @@ spring:
     username: app_user
     password: Fpscontroldev12#
     driver-class-name: org.postgresql.Driver
+    hikari:
+      minimum-idle: 15          # Minimum number of idle connections in the pool
+      maximum-pool-size: 75     # Maximum number of connections (active + idle)
+      idle-timeout: 30000       # 30 seconds - Time a connection can remain idle before being closed
+      max-lifetime: 1800000      # 30 minutes - Maximum lifetime of a connection
+      leak-detection-threshold: 60000  # 60 seconds - Time a connection can be borrowed before flagged as leaked
+      connection-timeout: 45000 # 45 seconds - Time to wait for a new connection before timing out
 
   jpa:
     hibernate:
@@ -20,10 +27,41 @@ spring:
       uri: mongodb://root:password@10.10.12.12:27017/dev-mes-qc?authSource=admin
       database: dev-mes-qc
 
+    redis:
+      host: 10.10.12.12
+      port: 6379
+
   security:
+    oauth2:
+      resource-server:
+        jwt:
+          issuer-uri: https://cognito-idp.us-east-2.amazonaws.com/us-east-2_efikSZruT
+
     user:
       name: fps-control
       password: fpscontrols123
+
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+
+aws:
+  sns:
+    region: ${AWS_REGION}
+    sms-type: Transactional
+    access-key: ${AWS_ACCESS_KEY}
+    secret-key: ${AWS_SECRET_KEY}
+  cognito:
+    region: ${AWS_REGION}
+    access-key: ${AWS_ACCESS_KEY}
+    secret-key: ${AWS_SECRET_KEY}
+    domain: https://us-east-2efikszrut.auth.us-east-2.amazoncognito.com
+    user-pool-id: us-east-2_efikSZruT
+    client-id: 4ih0c0267q6mrckj7fdsj2c7ct
+    client-secret: gsh0q9k67ffj67mjdrnqhseq7aipvguuhgug92gqjtfon11gq8m
+    jwk-url: https://cognito-idp.us-east-2.amazonaws.com/us-east-2_efikSZruT/.well-known/jwks.json
+    issuer-url: https://cognito-idp.us-east-2.amazonaws.com/us-east-2_efikSZruT
+    audience: 4ih0c0267q6mrckj7fdsj2c7ct
 
 feign:
   client:
@@ -32,6 +70,18 @@ feign:
         url: http://s3-adapter-service:8083
         connect-timeout: 5000
         read-timeout: 5000
+
+jwt:
+  secret: "kLLoGMeKsPCYbcyF5+dxzvUUL7NIMb3TyaNhIGMWU8bkeMWrVzdh7Ufa2RCcqdh0S7eCgDGK23eRYvQyiZ2snw=="
+  access_token:
+    expiration: 86400000
+  refresh_token:
+    expiration: 604800000
+
+cors:
+  allowed-origins:
+    - "*"
+  max-age: 60
 
 qc:
   snapshot:
