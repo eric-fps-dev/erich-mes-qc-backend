@@ -52,7 +52,7 @@ public class AlertRecordController {
     @PostMapping("/update-record")
     public ResponseEntity<?> updateAlertRecord(@RequestBody UpdateAlertRecordRequest request) {
         try {
-            AlertRecordDTO updated = alertRecordService.updateRecord(request.getId(), request.getRpn(), request.getUpdatedBy());
+            AlertRecordDTO updated = alertRecordService.updateRecord(request.getId(), request.getRpn(), Long.valueOf(request.getUpdatedBy()));
             return ResponseEntity.ok(updated);
         } catch (Exception e) {
             log.error("Update failed: {}", e.getMessage(), e);
@@ -70,7 +70,7 @@ public class AlertRecordController {
     @DeleteMapping("/{id}")
     public ResponseEntity<?> deleteAlertRecord(
             @PathVariable Long id,
-            @RequestParam("userId") Integer userId
+            @RequestParam("userId") Long userId
     ) {
         try {
             AlertRecordDTO deleted = alertRecordService.deleteRecord(id, userId);

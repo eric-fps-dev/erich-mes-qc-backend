@@ -1,7 +1,9 @@
 package com.fps.svmes.utils;
 
 import com.fps.svmes.repositories.jpaRepo.qcForm.QcFormTemplateRepository;
-import com.fps.svmes.services.UserService;
+
+import com.fps.svmes.repositories.jpaRepo.user.UserRepository;
+import com.itextpdf.text.Paragraph;
 import com.mongodb.client.MongoCollection;
 import org.bson.Document;
 import org.bson.types.ObjectId;
@@ -18,7 +20,7 @@ public class MongoFormTemplateUtils {
     private QcFormTemplateRepository qcFormTemplateRepository;
 
     @Autowired
-    private UserService userService;
+    private UserRepository userRepository;
 
     public HashMap<String, String> getFormTemplateKeyValueMapping(Long formId) {
         String formTemplateJson = qcFormTemplateRepository.findFormTemplateJsonById(formId);
@@ -148,8 +150,9 @@ public class MongoFormTemplateUtils {
 
             if ("created_by".equals(key) && value instanceof Long) {
                 try {
-                    String creator = userService.getUserById(Math.toIntExact((Long) value)).getName();
-                    formatted.put("提交人", creator);
+                    String creatorName = userRepository.findNameById(Math.toIntExact((Long) value));
+
+                    formatted.put("提交人", (creatorName != null ? creatorName : "未知用户"));
                 } catch (Exception e) {
                     formatted.put("提交人", "未知用户");
                 }

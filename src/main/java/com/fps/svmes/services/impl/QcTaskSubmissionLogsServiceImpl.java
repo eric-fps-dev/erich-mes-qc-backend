@@ -6,8 +6,8 @@ import com.fps.svmes.repositories.jpaRepo.qcForm.QcFormTemplateRepository;
 import com.fps.svmes.repositories.jpaRepo.qcForm.QcTaskSubmissionLogsRepository;
 import com.fps.svmes.repositories.jpaRepo.qcForm.QcApprovalAssignmentRepository;
 import com.fps.svmes.services.AlertRecordService;
+import com.fps.svmes.repositories.jpaRepo.user.UserRepository;
 import com.fps.svmes.services.QcTaskSubmissionLogsService;
-import com.fps.svmes.services.UserService;
 import com.fps.svmes.services.QcSnapshotSubmissionService;
 import com.itextpdf.text.Paragraph;
 
@@ -24,6 +24,8 @@ import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.bson.types.ObjectId;
 import org.modelmapper.ModelMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
@@ -45,9 +47,6 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import static com.fps.svmes.controllers.UserController.logger;
-
-
 @Service
 public class QcTaskSubmissionLogsServiceImpl implements QcTaskSubmissionLogsService {
     @Autowired
@@ -63,7 +62,9 @@ public class QcTaskSubmissionLogsServiceImpl implements QcTaskSubmissionLogsServ
     private QcFormTemplateRepository qcFormTemplateRepository;
 
     @Autowired
-    private UserService userService;
+    private UserRepository userRepository;
+
+    public static Logger logger = LoggerFactory.getLogger(QcTaskSubmissionLogsService.class);
 
     @Autowired
     private AlertRecordService alertRecordService;
@@ -519,12 +520,10 @@ public class QcTaskSubmissionLogsServiceImpl implements QcTaskSubmissionLogsServ
                     chineseFont
             ));
 
-            // Find the person name using the UserService
-            String personName = userService.getUserById(
-                            Integer.parseInt(String.valueOf(mongoDocument.get("created_by"))))
-                    .getName();
+            String creatorName = userRepository.findNameById(Integer.parseInt(String.valueOf(mongoDocument.get("created_by"))));
+
             pdfDocument.add(new Paragraph(
-                    "提交人: " + personName,
+                    "提交人: " + (creatorName != null ? creatorName : "未知用户"),
                     chineseFont
             ));
 

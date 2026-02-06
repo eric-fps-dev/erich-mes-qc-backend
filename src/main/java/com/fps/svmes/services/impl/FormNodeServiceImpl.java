@@ -1,7 +1,7 @@
 package com.fps.svmes.services.impl;
 
 import com.fps.svmes.models.nosql.FormNode;
-import com.fps.svmes.repositories.jpaRepo.user.TeamFormRepository;
+//import com.fps.svmes.repositories.jpaRepo.user.TeamFormRepository;
 import com.fps.svmes.repositories.mongoRepo.FormNodeRepository;
 import com.fps.svmes.services.FormNodeService;
 import org.slf4j.Logger;
@@ -18,8 +18,9 @@ public class FormNodeServiceImpl implements FormNodeService {
     @Autowired
     private FormNodeRepository repository;
 
-    @Autowired
-    private TeamFormRepository teamFormRepository;
+    // TODO: add after adding missing data model in commmon module
+//    @Autowired
+//    private TeamFormRepository teamFormRepository;
 
     public static final Logger logger = LoggerFactory.getLogger(FormNodeServiceImpl.class);
 
@@ -76,7 +77,9 @@ public class FormNodeServiceImpl implements FormNodeService {
                 // Clean team-form association for deleted form node
                 List<String> formNodeArr = new ArrayList<>();
                 collectFormIdsRecursively(nodes.get(i), formNodeArr);
-                teamFormRepository.deleteAllByFormIds(formNodeArr);
+
+                // TODO: add after adding missing data model in commmon module
+                // teamFormRepository.deleteAllByFormIds(formNodeArr);
 
                 nodes.remove(i); // Remove the root node
                 repository.deleteById(id); // Persist the deletion
@@ -118,7 +121,9 @@ public class FormNodeServiceImpl implements FormNodeService {
                     // Clean team-form association for deleted form node
                     List<String> formNodeArr = new ArrayList<>();
                     collectFormIdsRecursively(child, formNodeArr);
-                    teamFormRepository.deleteAllByFormIds(formNodeArr);
+
+                    // TODO: add after adding missing data model in commmon module
+//                    teamFormRepository.deleteAllByFormIds(formNodeArr);
 
                     currentNode.getChildren().remove(i); // Remove the matching child node
 

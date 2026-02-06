@@ -7,8 +7,9 @@ import com.fps.svmes.dto.dtos.reporting.OptionItemDTO;
 import com.fps.svmes.dto.dtos.reporting.TimeBucketedOptionDTO;
 import com.fps.svmes.dto.dtos.reporting.WidgetDataDTO;
 import com.fps.svmes.repositories.jpaRepo.qcForm.QcFormTemplateRepository;
+import com.fps.svmes.repositories.jpaRepo.user.UserRepository;
 import com.fps.svmes.services.ReportingService;
-import com.fps.svmes.services.UserService;
+import com.fps.shared.entity.primary.user.User;
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
@@ -18,7 +19,6 @@ import org.bson.types.ObjectId;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-
 import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
 import java.time.Instant;
@@ -53,7 +53,7 @@ public class ReportingServiceImpl implements ReportingService {
     QcFormTemplateRepository qcFormTemplateRepository;
 
     @Autowired
-    UserService userService;
+    UserRepository userRepository;
 
     @Value("${spring.data.mongodb.database}")
     private String mongoDatabaseName;
@@ -475,8 +475,15 @@ public class ReportingServiceImpl implements ReportingService {
         }
 
         // Bulk fetch user names
-        Map<Integer, String> userNameMap = userService.getUsersByIds(new ArrayList<>(userIds)).stream()
-                .collect(Collectors.toMap(u -> u.getId(), u -> u.getName()));
+//        Map<Integer, String> userNameMap = userService.getUsersByIds(new ArrayList<>(userIds)).stream()
+//                .collect(Collectors.toMap(u -> u.getId(), u -> u.getName()));
+
+        // Bulk fetch user names from local DB
+        Map<Long, String> userNameMap = userRepository.findAllByIdIn(userIds).stream()
+                .collect(Collectors.toMap(
+                        User::getId,
+                        User::getFullName
+                ));
 
         // Convert and return only the latest versions
         return latestVersionMap.values().stream()
@@ -551,8 +558,14 @@ public class ReportingServiceImpl implements ReportingService {
         }
 
         // Bulk fetch user names
-        Map<Integer, String> userNameMap = userService.getUsersByIds(new ArrayList<>(userIds)).stream()
-                .collect(Collectors.toMap(u -> u.getId(), u -> u.getName()));
+//        Map<Integer, String> userNameMap = userService.getUsersByIds(new ArrayList<>(userIds)).stream()
+//                .collect(Collectors.toMap(u -> u.getId(), u -> u.getName()));
+        Map<Long, String> userNameMap =
+                userRepository.findAllByIdIn(userIds).stream()
+                        .collect(Collectors.toMap(
+                                User::getId,
+                                User::getFullName
+                        ));
 
         // Stream Pipeline: Format -> Filter -> Sort
         Stream<Document> stream = latestVersionMap.values().parallelStream()
@@ -660,8 +673,14 @@ public class ReportingServiceImpl implements ReportingService {
         }
 
         // Bulk fetch user names
-        Map<Integer, String> userNameMap = userService.getUsersByIds(new ArrayList<>(userIds)).stream()
-                .collect(Collectors.toMap(u -> u.getId(), u -> u.getName()));
+//        Map<Integer, String> userNameMap = userService.getUsersByIds(new ArrayList<>(userIds)).stream()
+//                .collect(Collectors.toMap(u -> u.getId(), u -> u.getName()));
+        Map<Long, String> userNameMap =
+                userRepository.findAllByIdIn(userIds).stream()
+                        .collect(Collectors.toMap(
+                                User::getId,
+                                User::getFullName
+                        ));
 
         /** ---------- 2. Pipeline: Format -> Filter -> Sort ---------- */
         Stream<Document> stream = latestVersionMap.values().parallelStream()
@@ -727,8 +746,15 @@ public class ReportingServiceImpl implements ReportingService {
         });
 
         // Bulk fetch user names
-        Map<Integer, String> userNameMap = userService.getUsersByIds(new ArrayList<>(userIds)).stream()
-                .collect(Collectors.toMap(u -> u.getId(), u -> u.getName()));
+//        Map<Integer, String> userNameMap = userService.getUsersByIds(new ArrayList<>(userIds)).stream()
+//                .collect(Collectors.toMap(u -> u.getId(), u -> u.getName()));
+
+        Map<Long, String> userNameMap =
+                userRepository.findAllByIdIn(userIds).stream()
+                        .collect(Collectors.toMap(
+                                User::getId,
+                                User::getFullName
+                        ));
 
         return versionedDocs.stream()
                 .map(doc -> formattedResult(doc, optionItemsKeyValueMap, keyValueMap, userNameMap))
@@ -791,7 +817,7 @@ public class ReportingServiceImpl implements ReportingService {
     }
 
     // TODO: use MongoFormTemplateUtils
-    private Document formattedResult(Document document, HashMap<String, Object> optionItemsKeyValueMap, HashMap<String, String> keyValueMap, Map<Integer, String> userNameMap) {
+    private Document formattedResult(Document document, HashMap<String, Object> optionItemsKeyValueMap, HashMap<String, String> keyValueMap, Map<Long, String> userNameMap) {
         Document formattedDocument = new Document();
 
         for (String key : document.keySet()) {
@@ -1327,8 +1353,15 @@ public class ReportingServiceImpl implements ReportingService {
         }
 
         // Bulk fetch user names
-        Map<Integer, String> userNameMap = userService.getUsersByIds(new ArrayList<>(userIds)).stream()
-                .collect(Collectors.toMap(u -> u.getId(), u -> u.getName()));
+//        Map<Integer, String> userNameMap = userService.getUsersByIds(new ArrayList<>(userIds)).stream()
+//                .collect(Collectors.toMap(u -> u.getId(), u -> u.getName()));
+
+        Map<Long, String> userNameMap =
+                userRepository.findAllByIdIn(userIds).stream()
+                        .collect(Collectors.toMap(
+                                User::getId,
+                                User::getFullName
+                        ));
 
         // Stream Pipeline: Format -> Filter -> Sort
         Stream<Document> stream = latestVersionMap.values().parallelStream()

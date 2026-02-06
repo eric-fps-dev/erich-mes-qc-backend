@@ -12,9 +12,12 @@ public class RoleDTO {
     @JsonProperty("name")
     private String name;
 
-    @JsonProperty("description")
-    private String description;
+    @JsonProperty("code")
+    private String code;
 
-    @JsonProperty("el_tag_type")
-    private String elTagType;
+//    @JsonProperty("description")
+//    private String description;
+//
+//    @JsonProperty("el_tag_type")
+//    private String elTagType;
 }

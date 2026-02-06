@@ -155,7 +155,7 @@ public class AlertRecordServiceImpl implements AlertRecordService {
         Set<Long> templateIds = new HashSet<>();
         Set<Long> productIds = new HashSet<>();
         Set<Long> batchIds = new HashSet<>();
-        Set<Integer> userIds = new HashSet<>();
+        Set<Long> userIds = new HashSet<>();
         Set<Integer> statusIds = new HashSet<>();
         Set<Integer> riskLevelIds = new HashSet<>();
 
@@ -166,8 +166,8 @@ public class AlertRecordServiceImpl implements AlertRecordService {
 
             alert.getAlertProducts().forEach(p -> productIds.add(p.getProductId()));
             alert.getAlertBatches().forEach(b -> batchIds.add(b.getBatchId()));
-            alert.getAlertInspectors().forEach(i -> userIds.add(i.getInspectorId().intValue()));
-            alert.getAlertReviewers().forEach(r -> userIds.add(r.getReviewerId().intValue()));
+            alert.getAlertInspectors().forEach(i -> userIds.add(i.getInspectorId()));
+            alert.getAlertReviewers().forEach(r -> userIds.add(r.getReviewerId()));
         }
 
         // Batch fetch all referenced data
@@ -184,7 +184,7 @@ public class AlertRecordServiceImpl implements AlertRecordService {
                         b -> b.getId(),
                         b -> modelMapper.map(b, SuggestedBatchDTO.class)));
 
-        Map<Integer, UserDTO> userMap = userRepository.findAllById(userIds)
+        Map<Long, UserDTO> userMap = userRepository.findAllById(userIds)
                 .stream().collect(Collectors.toMap(
                         u -> u.getId(),
                         u -> modelMapper.map(u, UserDTO.class)));
@@ -258,13 +258,13 @@ public class AlertRecordServiceImpl implements AlertRecordService {
 
             // Inspectors
             dto.setInspectors(alert.getAlertInspectors().stream()
-                    .map(i -> userMap.get(i.getInspectorId().intValue()))
+                    .map(i -> userMap.get(i.getInspectorId()))
                     .filter(Objects::nonNull)
                     .toList());
 
             // Reviewers
             dto.setReviewers(alert.getAlertReviewers().stream()
-                    .map(r -> userMap.get(r.getReviewerId().intValue()))
+                    .map(r -> userMap.get(r.getReviewerId()))
                     .filter(Objects::nonNull)
                     .toList());
 
@@ -287,7 +287,7 @@ public class AlertRecordServiceImpl implements AlertRecordService {
 
     @Override
     @Transactional
-    public AlertRecordDTO updateRecord(Long alertId, Integer newRpn, Integer userId) {
+    public AlertRecordDTO updateRecord(Long alertId, Integer newRpn, Long userId) {
         AlertRecord entity = alertRecordRepository.findById(alertId)
                 .orElseThrow(() -> new RuntimeException("alert record not exist"));
 
@@ -299,7 +299,7 @@ public class AlertRecordServiceImpl implements AlertRecordService {
         // Set risk level according to tooltip rules
         entity.setRiskLevelId(newRpn >= 200 ? 3 : newRpn >= 100 ? 2 : 1);
         entity.setAlertStatus(newStatus);
-        entity.setUpdatedBy(userId);
+        entity.setUpdatedBy(Math.toIntExact(userId));
         entity.setUpdatedAt(OffsetDateTime.now());
 
         alertRecordRepository.save(entity);
@@ -312,8 +312,8 @@ public class AlertRecordServiceImpl implements AlertRecordService {
             log.setAlertRecordId(alertId);
             log.setOperation("update");
             log.setDiff(diff);
-            log.setCreatedBy(userId);
-            log.setUpdatedBy(userId);
+            log.setCreatedBy(Math.toIntExact(userId));
+            log.setUpdatedBy(Math.toIntExact(userId));
             log.setCreatedAt(OffsetDateTime.now());
             log.setUpdatedAt(OffsetDateTime.now());
             alertRecordLogRepository.save(log);
@@ -324,7 +324,7 @@ public class AlertRecordServiceImpl implements AlertRecordService {
 
     @Override
     @Transactional
-    public AlertRecordDTO deleteRecord(Long alertId, Integer userId) {
+    public AlertRecordDTO deleteRecord(Long alertId, Long userId) {
         AlertRecord entity = alertRecordRepository.findById(alertId)
                 .orElseThrow(() -> new RuntimeException("alert record not exist"));
 
@@ -332,7 +332,7 @@ public class AlertRecordServiceImpl implements AlertRecordService {
 
         // Logical deletion (archive)
         entity.setStatus(0);
-        entity.setUpdatedBy(userId);
+        entity.setUpdatedBy(Math.toIntExact(userId));
         entity.setUpdatedAt(OffsetDateTime.now());
 
         alertRecordRepository.save(entity);
@@ -345,8 +345,8 @@ public class AlertRecordServiceImpl implements AlertRecordService {
         log.setAlertRecordId(alertId);
         log.setOperation("delete");
         log.setDiff(diff);
-        log.setCreatedBy(userId);
-        log.setUpdatedBy(userId);
+        log.setCreatedBy(Math.toIntExact(userId));
+        log.setUpdatedBy(Math.toIntExact(userId));
         log.setCreatedAt(OffsetDateTime.now());
         log.setUpdatedAt(OffsetDateTime.now());
 
@@ -506,7 +506,7 @@ public class AlertRecordServiceImpl implements AlertRecordService {
         Set<Long> templateIds = new HashSet<>();
         Set<Long> productIds = new HashSet<>();
         Set<Long> batchIds = new HashSet<>();
-        Set<Integer> userIds = new HashSet<>();
+        Set<Long> userIds = new HashSet<>();
         Set<Integer> statusIds = new HashSet<>();
         Set<Integer> riskLevelIds = new HashSet<>();
 
@@ -516,8 +516,8 @@ public class AlertRecordServiceImpl implements AlertRecordService {
             if (alert.getRiskLevelId() != null) riskLevelIds.add(alert.getRiskLevelId());
             alert.getAlertProducts().forEach(p -> productIds.add(p.getProductId()));
             alert.getAlertBatches().forEach(b -> batchIds.add(b.getBatchId()));
-            alert.getAlertInspectors().forEach(i -> userIds.add(i.getInspectorId().intValue()));
-            alert.getAlertReviewers().forEach(r -> userIds.add(r.getReviewerId().intValue()));
+            alert.getAlertInspectors().forEach(i -> userIds.add(i.getInspectorId()));
+            alert.getAlertReviewers().forEach(r -> userIds.add(r.getReviewerId()));
         }
 
         Map<Long, QcFormTemplate> templateMap = qcFormTemplateRepository.findAllById(templateIds)
@@ -529,7 +529,7 @@ public class AlertRecordServiceImpl implements AlertRecordService {
         Map<Long, SuggestedBatchDTO> batchMap = suggestedBatchRepository.findAllById(batchIds)
                 .stream().collect(Collectors.toMap(b -> b.getId(), b -> modelMapper.map(b, SuggestedBatchDTO.class)));
 
-        Map<Integer, UserDTO> userMap = userRepository.findAllById(userIds)
+        Map<Long, UserDTO> userMap = userRepository.findAllById(userIds)
                 .stream().collect(Collectors.toMap(u -> u.getId(), u -> modelMapper.map(u, UserDTO.class)));
 
         Map<Integer, AlertStatusDTO> statusMap = alertStatusRepository.findAllById(statusIds)
@@ -595,11 +595,11 @@ public class AlertRecordServiceImpl implements AlertRecordService {
                     .filter(Objects::nonNull).toList());
 
             dto.setInspectors(alert.getAlertInspectors().stream()
-                    .map(i -> userMap.get(i.getInspectorId().intValue()))
+                    .map(i -> userMap.get(i.getInspectorId()))
                     .filter(Objects::nonNull).toList());
 
             dto.setReviewers(alert.getAlertReviewers().stream()
-                    .map(r -> userMap.get(r.getReviewerId().intValue()))
+                    .map(r -> userMap.get(r.getReviewerId()))
                     .filter(Objects::nonNull).toList());
 
             if (alert.getAlertStatus() != null) {
