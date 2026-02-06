@@ -42,12 +42,12 @@ public class ModelMapperConfig {
         modelMapper.addConverter(userConverter);
     }
 
-    @Bean
-    public ObjectMapper objectMapper() {
-//        return new ObjectMapper(); // Use for JSON serialization/deserialization
-        ObjectMapper mapper = new ObjectMapper();
-        mapper.registerModule(new JavaTimeModule()); // Support for Java 8 Date/Time types
-        mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS); // Use ISO-8601 format
-        return mapper;
-    }
+//    @Bean
+//    public ObjectMapper objectMapper() {
+////        return new ObjectMapper(); // Use for JSON serialization/deserialization
+//        ObjectMapper mapper = new ObjectMapper();
+//        mapper.registerModule(new JavaTimeModule()); // Support for Java 8 Date/Time types
+//        mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS); // Use ISO-8601 format
+//        return mapper;
+//    }
 }

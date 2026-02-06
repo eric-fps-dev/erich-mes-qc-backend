@@ -1,6 +1,6 @@
 spring:
   datasource:
-    url: jdbc:postgresql://10.10.12.12:5432/mes
+    url: jdbc:postgresql://10.10.12.12:5432/mes_dev
     username: app_user
     password: Fpscontroldev12#
     driver-class-name: org.postgresql.Driver
