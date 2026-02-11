@@ -165,7 +165,7 @@
         <dependency>
             <groupId>com.fps.shared</groupId>
             <artifactId>common-module</artifactId>
-            <version>1.2.68-RELEASE</version>
+            <version>1.2.80-RELEASE</version>
         </dependency>
 	</dependencies>
 
