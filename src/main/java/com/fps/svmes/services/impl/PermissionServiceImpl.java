@@ -7,6 +7,7 @@
 
 package com.fps.svmes.services.impl;
 
+import com.fps.shared.dto.dtos.rbac.PermissionNodeDTO;
 import com.fps.shared.entity.primary.rbac.Permission;
 import com.fps.shared.entity.primary.rbac.Role;
 import com.fps.shared.exceptions.ResourceNotFoundException;
@@ -70,6 +71,21 @@ public class PermissionServiceImpl implements PermissionService {
                 .toList();
 
         return permissions;
+    }
+
+    @Override
+    public List<PermissionNodeDTO> getUserPermissionsTree(Long userId, Boolean flat) {
+        return List.of();
+    }
+
+    @Override
+    public List<PermissionNodeDTO> getPermissionTreeByRole(Integer roleId) {
+        return List.of();
+    }
+
+    @Override
+    public List<PermissionNodeDTO> getPermissionTree() {
+        return List.of();
     }
 
     private void collectPermissionsDownward(Role role, Set<Permission> collected, Set<Integer> visited) {

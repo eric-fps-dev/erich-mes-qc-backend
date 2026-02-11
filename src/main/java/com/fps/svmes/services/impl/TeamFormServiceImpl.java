@@ -1,9 +1,8 @@
 package com.fps.svmes.services.impl;
 
 import com.fps.shared.entity.primary.team.Team;
+import com.fps.shared.entity.primary.team.TeamQCForm;
 import com.fps.svmes.models.nosql.FormNode;
-import com.fps.svmes.models.sql.user.TeamForm;
-import com.fps.svmes.models.sql.user.TeamFormId;
 import com.fps.svmes.repositories.jpaRepo.user.TeamFormRepository;
 import com.fps.svmes.repositories.jpaRepo.user.TeamRepository;
 import com.fps.svmes.repositories.mongoRepo.FormNodeRepository;
@@ -33,9 +32,9 @@ public class TeamFormServiceImpl implements TeamFormService {
 
         Set<String> existingFormIds = teamFormRepository.findFormIdsByTeamId(teamId);
 
-        List<TeamForm> newAssignments = formIds.stream()
+        List<TeamQCForm> newAssignments = formIds.stream()
                 .filter(formId -> !existingFormIds.contains(formId))
-                .map(formId -> new TeamForm(new TeamFormId(teamId, formId), team))
+                .map(formId -> new TeamQCForm(new TeamQCForm.TeamFormId(teamId, formId), team))
                 .toList();
 
         if (!newAssignments.isEmpty()) {
