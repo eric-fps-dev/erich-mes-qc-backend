@@ -849,14 +849,16 @@ public class ReportingServiceImpl implements ReportingService {
             } else {
                 formattedDocument.put(formattedKey, value);
             }
+        }
 
-            // 获取 `created_by` 并添加 `created_by_name` using bulk map
-            if (document.containsKey("created_by") && document.get("created_by") instanceof Number) {
-                Number createdByIdNum = (Number) document.get("created_by");
-                Integer createdById = createdByIdNum.intValue();
-                String creatorName = userNameMap.getOrDefault(createdById, "未知用户");
-                formattedDocument.put("提交人", creatorName); // 添加 `created_by_name`
-            }
+        // 获取 `created_by` 并添加 `created_by_name` using bulk map
+        if (document.containsKey("created_by") && document.get("created_by") instanceof Number) {
+            Number createdByIdNum = (Number) document.get("created_by");
+
+            // Match with long type as userNameMap key is long to avoid same number mismatch issue
+            Long createdById = createdByIdNum.longValue();
+            String creatorName = userNameMap.getOrDefault(createdById, "未知用户");
+            formattedDocument.put("提交人", creatorName); // 添加 `created_by_name`
         }
 
         // 🔧 Remap exceeded_info keys from fieldName to fieldLabel
