@@ -105,7 +105,14 @@ public class SPCServiceImpl implements SPCService {
                 Timestamp createdAt = Timestamp.from(doc.getDate("created_at").toInstant());
                 for (String wantedField : wantedLimits) {
                     if (doc.get(wantedField) != null) {
-                        Double value = ((Number) doc.get(wantedField)).doubleValue();
+                        Object raw = doc.get(wantedField);
+                        Double value;
+                        if (raw instanceof Number) {
+                            value = ((Number) raw).doubleValue();
+                        } else {
+                            try { value = Double.parseDouble(raw.toString()); }
+                            catch (NumberFormatException e) { continue; }
+                        }
                         TimeSeriesDTO timeSeriesDTO = new TimeSeriesDTO();
                         timeSeriesDTO.setTimestamp(createdAt);
                         timeSeriesDTO.setValue(value);
