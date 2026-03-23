@@ -761,6 +761,31 @@ public class ReportingServiceImpl implements ReportingService {
                 .collect(Collectors.toList());
     }
 
+    @Override
+    public Map<String, Object> debugTemplateData(Long formTemplateId, String startDateTime, String endDateTime) {
+        MongoDatabase database = mongoClient.getDatabase(mongoDatabaseName);
+        Map<String, Object> result = new LinkedHashMap<>();
+
+        // 1. Key-value map (includes deleted field mappings after fix)
+        HashMap<String, String> keyValueMap = getFormTemplateKeyValueMapping(formTemplateId);
+        result.put("keyValueMap", keyValueMap);
+
+        // 2. Relevant collections
+        List<String> collections = getRelevantCollections(database, formTemplateId, startDateTime, endDateTime);
+        result.put("relevantCollections", collections);
+
+        // 3. Raw keys from first document in each collection
+        Map<String, Object> rawKeysPerCollection = new LinkedHashMap<>();
+        for (String colName : collections) {
+            MongoCollection<Document> col = database.getCollection(colName);
+            Document firstDoc = col.find().first();
+            rawKeysPerCollection.put(colName, firstDoc != null ? new ArrayList<>(firstDoc.keySet()) : "empty");
+        }
+        result.put("rawDocumentKeys", rawKeysPerCollection);
+
+        return result;
+    }
+
     // TODO: use MongoFormTemplateUtils
     public HashMap<String, String> getFormTemplateKeyValueMapping(Long formId) {
         String formTemplateJson = qcFormTemplateRepository.findFormTemplateJsonById(formId);
@@ -780,6 +805,27 @@ public class ReportingServiceImpl implements ReportingService {
             }
         } catch (Exception e) {
             throw new RuntimeException("Error parsing form template JSON", e);
+        }
+
+        // Supplement with soft-deleted field mappings so historical records that still
+        // contain deleted field data get their keys resolved to the correct labels.
+        try {
+            MongoDatabase database = mongoClient.getDatabase(mongoDatabaseName);
+            MongoCollection<Document> pairsCollection = database.getCollection("form_template_key_label_pairs");
+            Document pairsDoc = pairsCollection.find(new Document("qc_form_template_id", formId)).first();
+            if (pairsDoc != null && pairsDoc.containsKey("fields")) {
+                List<Document> fields = pairsDoc.getList("fields", Document.class);
+                for (Document field : fields) {
+                    String key = field.getString("key");
+                    String label = field.getString("label");
+                    // Only add if not already mapped by the active template (active fields take precedence)
+                    if (key != null && label != null && !keyValueMap.containsKey(key)) {
+                        keyValueMap.put(key, label);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // Non-fatal: deleted field labels won't resolve, but active fields still work
         }
 
         return keyValueMap;

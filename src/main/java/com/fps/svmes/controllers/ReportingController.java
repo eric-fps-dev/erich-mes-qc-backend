@@ -9,6 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/reporting")
@@ -114,6 +115,17 @@ public class ReportingController {
      * @param search optional search keyword
      * @return paged result of filtered documents
      */
+    /**
+     * Debug endpoint: returns keyValueMap and raw document keys to diagnose deleted field data issues.
+     */
+    @GetMapping("/debug/template-data")
+    public ResponseEntity<Map<String, Object>> debugTemplateData(
+            @RequestParam Long formTemplateId,
+            @RequestParam String startDateTime,
+            @RequestParam String endDateTime) {
+        return ResponseEntity.ok(reportingService.debugTemplateData(formTemplateId, startDateTime, endDateTime));
+    }
+
     @GetMapping("/qc-records/drilldown")
     public PagedResultDTO<Document> getDrilldownRecords(
             @RequestParam Long formTemplateId,

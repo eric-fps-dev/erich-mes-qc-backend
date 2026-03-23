@@ -55,4 +55,11 @@ public class MongoServiceImpl implements MongoService {
         collection.deleteOne(filter);
     }
 
+    @Override
+    public Document findOne(String collectionName, Document filter) {
+        MongoDatabase db = mongoClient.getDatabase(mongoDatabaseName);
+        MongoCollection<Document> collection = db.getCollection(collectionName);
+        return collection.find(filter).first();
+    }
+
 }

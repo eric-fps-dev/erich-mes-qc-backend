@@ -6,6 +6,7 @@ import org.bson.Document;
 
 import java.security.Timestamp;
 import java.util.List;
+import java.util.Map;
 
 public interface ReportingService {
     List<WidgetDataDTO> extractWidgetData(String jsonInput);
@@ -53,6 +54,8 @@ public interface ReportingService {
      * @param search optional search keyword
      * @return paged result of filtered documents
      */
+    Map<String, Object> debugTemplateData(Long formTemplateId, String startDateTime, String endDateTime);
+
     PagedResultDTO<Document> fetchDrilldownRecords(
             Long formTemplateId,
             String fieldName,

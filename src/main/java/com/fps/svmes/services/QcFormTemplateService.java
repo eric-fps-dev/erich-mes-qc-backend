@@ -4,6 +4,7 @@ package com.fps.svmes.services;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fps.svmes.dto.dtos.qcForm.QcFormTemplateDTO;
+import com.fps.svmes.dto.dtos.qcForm.QcFormTemplateEditLogDTO;
 
 import java.util.List;
 
@@ -18,4 +19,7 @@ public interface QcFormTemplateService {
     String getApprovalTypeByFormId(Long formTemplateId);
     String resolveLabelFromTemplateByKey(Long templateId, String fieldKey);
     void extractAndStoreKeyLabelPairs(QcFormTemplateDTO template);
+    QcFormTemplateDTO updateTemplateWithNodeSync(Long id, QcFormTemplateDTO dto);
+    List<QcFormTemplateEditLogDTO> getEditLog(Long templateId);
+    List<java.util.Map<String, String>> getTemplateFields(Long templateId);
 }
