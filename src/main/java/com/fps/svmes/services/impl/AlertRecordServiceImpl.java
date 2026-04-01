@@ -219,10 +219,8 @@ public class AlertRecordServiceImpl implements AlertRecordService {
             dto.setInvalidOptionItems(alert.getInvalidOptionItems());
             dto.setInvalidOptionItemsLabels(alert.getInvalidOptionLabels());
 
-            if ("options".equals(alert.getAlertType())) {
-                dto.setControlRange(
-                        alert.getOptionLabels() != null ? String.join(", ", alert.getOptionLabels()) : null
-                );
+            if ("options".equals(alert.getAlertType()) && alert.getOptionLabels() != null) {
+                dto.setControlRange(String.join(", ", alert.getOptionLabels()));
             } else if ("number".equals(alert.getAlertType()) &&
                     alert.getLowerControlLimit() != null && alert.getUpperControlLimit() != null) {
                 dto.setControlRange(alert.getLowerControlLimit() + " - " + alert.getUpperControlLimit());
@@ -651,11 +649,7 @@ public class AlertRecordServiceImpl implements AlertRecordService {
             dto.setSubmissionId(alert.getSubmissionId());
 
             if ("options".equals(alert.getAlertType()) && alert.getOptionLabels() != null) {
-                List<String> validLabels = new ArrayList<>(alert.getOptionLabels());
-                if (alert.getInvalidOptionLabels() != null) {
-                    validLabels.removeAll(alert.getInvalidOptionLabels());
-                }
-                dto.setControlRange(String.join(", ", validLabels));
+                dto.setControlRange(String.join(", ", alert.getOptionLabels()));
             } else if ("number".equals(alert.getAlertType()) &&
                     alert.getLowerControlLimit() != null &&
                     alert.getUpperControlLimit() != null) {

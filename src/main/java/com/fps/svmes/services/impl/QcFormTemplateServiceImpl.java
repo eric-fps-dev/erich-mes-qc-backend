@@ -100,8 +100,7 @@ public class QcFormTemplateServiceImpl implements QcFormTemplateService {
         if (formStructureChanged) {
             try {
                 extractAndStoreKeyLabelPairs(updatedTemplate);
-                mongoService.deleteOne("control_limit_setting", new Document("qc_form_template_id", id));
-                createControlLimitSetting(updatedTemplate);
+                mergeControlLimitSettings(updatedTemplate, id);
             } catch (Exception e) {
                 throw new RuntimeException("Failed to update MongoDB documents after template update", e);
             }
@@ -204,6 +203,138 @@ public class QcFormTemplateServiceImpl implements QcFormTemplateService {
         }
     }
 
+    private void mergeControlLimitSettings(QcFormTemplateDTO updatedTemplate, Long templateId) {
+        try {
+            ObjectMapper mapper = new ObjectMapper();
+
+            // Load existing control limits from MongoDB
+            Document existingDoc = mongoService.findOne("control_limit_setting",
+                    new Document("qc_form_template_id", templateId));
+            Document oldControlLimits = (existingDoc != null && existingDoc.containsKey("control_limits"))
+                    ? (Document) existingDoc.get("control_limits")
+                    : new Document();
+
+            // Build merged result
+            JsonNode root = mapper.readTree(updatedTemplate.getFormTemplateJson());
+            JsonNode widgetList = root.get("widgetList");
+
+            ObjectNode controlLimitDoc = mapper.createObjectNode();
+            controlLimitDoc.put("qc_form_template_id", updatedTemplate.getId());
+            ObjectNode mergedLimits = mapper.createObjectNode();
+
+            mergeControlLimits(widgetList, mergedLimits, oldControlLimits, mapper);
+            controlLimitDoc.set("control_limits", mergedLimits);
+
+            Document mongoDoc = Document.parse(mapper.writeValueAsString(controlLimitDoc));
+            mongoService.replaceOne("control_limit_setting",
+                    new Document("qc_form_template_id", templateId), mongoDoc);
+
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to merge control limit settings", e);
+        }
+    }
+
+    private void mergeControlLimits(JsonNode widgetList, ObjectNode mergedLimits,
+                                     Document oldControlLimits, ObjectMapper mapper) {
+        if (widgetList == null || !widgetList.isArray()) return;
+
+        for (JsonNode widget : widgetList) {
+            String type = widget.has("type") ? widget.get("type").asText() : "";
+
+            if ("grid".equals(type)) {
+                JsonNode cols = widget.get("cols");
+                if (cols != null) {
+                    for (JsonNode col : cols) {
+                        mergeControlLimits(col.get("widgetList"), mergedLimits, oldControlLimits, mapper);
+                    }
+                }
+            } else if ("number".equals(type)) {
+                JsonNode options = widget.get("options");
+                if (options != null && options.has("name") && options.has("label")) {
+                    String name = options.get("name").asText();
+                    String label = options.get("label").asText();
+
+                    ObjectNode limit = mapper.createObjectNode();
+                    limit.put("label", label);
+
+                    Document oldEntry = oldControlLimits.containsKey(name)
+                            ? (Document) oldControlLimits.get(name) : null;
+
+                    if (oldEntry != null && oldEntry.containsKey("upper_control_limit")
+                            && oldEntry.containsKey("lower_control_limit")) {
+                        // Unchanged field: preserve custom limits
+                        limit.put("upper_control_limit", ((Number) oldEntry.get("upper_control_limit")).doubleValue());
+                        limit.put("lower_control_limit", ((Number) oldEntry.get("lower_control_limit")).doubleValue());
+                    } else {
+                        // New field or type changed: apply defaults
+                        limit.put("upper_control_limit", 99999.00);
+                        limit.put("lower_control_limit", 0.00);
+                    }
+                    mergedLimits.set(name, limit);
+                }
+            } else if ("select".equals(type) || "radio".equals(type) || "checkbox".equals(type)) {
+                JsonNode options = widget.get("options");
+                if (options != null && options.has("name") && options.has("label") && options.has("optionItems")) {
+                    String name = options.get("name").asText();
+                    String label = options.get("label").asText();
+                    JsonNode optionItems = options.get("optionItems");
+
+                    List<String> newOptionValues = new ArrayList<>();
+                    List<Map<String, String>> optionList = new ArrayList<>();
+                    for (JsonNode item : optionItems) {
+                        String value = item.path("value").asText();
+                        newOptionValues.add(value);
+                        Map<String, String> optMap = new HashMap<>();
+                        optMap.put("value", value);
+                        optMap.put("label", item.path("label").asText());
+                        optionList.add(optMap);
+                    }
+
+                    ObjectNode limit = mapper.createObjectNode();
+                    limit.put("label", label);
+                    limit.putPOJO("optionItems", optionList);
+
+                    Document oldEntry = oldControlLimits.containsKey(name)
+                            ? (Document) oldControlLimits.get(name) : null;
+
+                    if (oldEntry != null && oldEntry.containsKey("valid_keys")) {
+                        // Detect whether the option set changed
+                        Set<String> oldOptionValues = new LinkedHashSet<>();
+                        List<?> oldItems = (List<?>) oldEntry.get("optionItems");
+                        if (oldItems != null) {
+                            for (Object item : oldItems) {
+                                if (item instanceof Document) {
+                                    Object val = ((Document) item).get("value");
+                                    if (val != null) oldOptionValues.add(val.toString());
+                                }
+                            }
+                        }
+
+                        if (oldOptionValues.equals(new LinkedHashSet<>(newOptionValues))) {
+                            // Options unchanged: preserve valid_keys (strip any that no longer exist)
+                            List<String> keptKeys = new ArrayList<>();
+                            List<?> oldValidKeys = (List<?>) oldEntry.get("valid_keys");
+                            if (oldValidKeys != null) {
+                                Set<String> newSet = new LinkedHashSet<>(newOptionValues);
+                                for (Object vk : oldValidKeys) {
+                                    if (newSet.contains(vk.toString())) keptKeys.add(vk.toString());
+                                }
+                            }
+                            limit.putPOJO("valid_keys", keptKeys);
+                        } else {
+                            // Options changed: reset to all valid (default)
+                            limit.putPOJO("valid_keys", newOptionValues);
+                        }
+                    } else {
+                        // New field or was numeric type: default all valid
+                        limit.putPOJO("valid_keys", newOptionValues);
+                    }
+                    mergedLimits.set(name, limit);
+                }
+            }
+        }
+    }
+
     @Override
     public void createControlLimitSetting(QcFormTemplateDTO template) {
         try {
@@ -286,9 +417,30 @@ public class QcFormTemplateServiceImpl implements QcFormTemplateService {
             }
             // --- END SOFT-DELETE MERGE ---
 
+            // --- OPTION ITEMS ---
+            Map<String, Map<String, String>> optionItemsMap = new LinkedHashMap<>();
+            extractOptionItemPairs(widgetList, optionItemsMap);
+
+            // Preserve previously stored option items for deleted fields
+            if (existing != null && existing.containsKey("option_items")) {
+                Document existingOptionItems = (Document) existing.get("option_items");
+                for (String fieldKey : existingOptionItems.keySet()) {
+                    if (!optionItemsMap.containsKey(fieldKey)) {
+                        Document oldMapping = (Document) existingOptionItems.get(fieldKey);
+                        Map<String, String> preserved = new LinkedHashMap<>();
+                        for (String v : oldMapping.keySet()) {
+                            preserved.put(v, oldMapping.getString(v));
+                        }
+                        optionItemsMap.put(fieldKey, preserved);
+                    }
+                }
+            }
+            // --- END OPTION ITEMS ---
+
             Document mongoDoc = new Document();
             mongoDoc.put("qc_form_template_id", template.getId());
             mongoDoc.put("fields", fieldList);
+            mongoDoc.put("option_items", optionItemsMap);
 
             mongoService.replaceOne("form_template_key_label_pairs",
                     new Document("qc_form_template_id", template.getId()),
@@ -313,17 +465,45 @@ public class QcFormTemplateServiceImpl implements QcFormTemplateService {
     }
 
     @Override
-    public List<java.util.Map<String, String>> getTemplateFields(Long templateId) {
+    public List<java.util.Map<String, Object>> getTemplateFields(Long templateId) {
         try {
             Document doc = mongoService.findOne("form_template_key_label_pairs",
                 new Document("qc_form_template_id", templateId));
             if (doc == null || !doc.containsKey("fields")) return java.util.Collections.emptyList();
+
+            // option_items is stored at the top level as {fieldKey: {optionValue: optionLabel}}
+            Document optionItemsDoc = doc.containsKey("option_items")
+                ? (Document) doc.get("option_items")
+                : new Document();
+
             List<Document> fields = doc.getList("fields", Document.class);
             return fields.stream().map(f -> {
-                java.util.Map<String, String> entry = new java.util.LinkedHashMap<>();
+                java.util.Map<String, Object> entry = new java.util.LinkedHashMap<>();
                 entry.put("key", f.getString("key"));
                 entry.put("label", f.getString("label"));
-                if (f.containsKey("deleted")) entry.put("deleted", f.getString("deleted"));
+                String deleted = f.getString("deleted");
+                if (deleted != null) entry.put("deleted", deleted);
+                String type = f.getString("type");
+                if (type != null) entry.put("type", type);
+
+                // Only attach optionItems for deleted fields whose type has discrete options
+                // (i.e. not "number" or "other") so the frontend can map raw stored values to labels
+                boolean isDeleted = "true".equals(deleted);
+                boolean isOptionType = type != null && !type.equals("number") && !type.equals("other");
+                if (isDeleted && isOptionType) {
+                    String fieldKey = f.getString("key");
+                    if (optionItemsDoc.containsKey(fieldKey)) {
+                        Document valueToLabel = (Document) optionItemsDoc.get(fieldKey);
+                        List<java.util.Map<String, String>> optionList = new java.util.ArrayList<>();
+                        for (Map.Entry<String, Object> e : valueToLabel.entrySet()) {
+                            java.util.Map<String, String> opt = new java.util.LinkedHashMap<>();
+                            opt.put("value", e.getKey());
+                            opt.put("label", e.getValue() != null ? e.getValue().toString() : "");
+                            optionList.add(opt);
+                        }
+                        if (!optionList.isEmpty()) entry.put("optionItems", optionList);
+                    }
+                }
                 return entry;
             }).collect(Collectors.toList());
         } catch (Exception e) {
@@ -444,6 +624,37 @@ public class QcFormTemplateServiceImpl implements QcFormTemplateService {
                 for (JsonNode col : widget.get("cols")) {
                     if (col.has("widgetList")) {
                         extractInputKeyLabelPairs(col.get("widgetList"), result);
+                    }
+                }
+            }
+        }
+    }
+
+    private void extractOptionItemPairs(JsonNode widgetList, Map<String, Map<String, String>> result) {
+        if (widgetList == null || !widgetList.isArray()) return;
+        for (JsonNode widget : widgetList) {
+            if (widget.has("formItemFlag") && widget.get("formItemFlag").asBoolean()) {
+                JsonNode options = widget.get("options");
+                if (options != null && options.has("name") && options.has("optionItems") && options.get("optionItems").isArray()) {
+                    String key = options.get("name").asText();
+                    Map<String, String> valueToLabel = new LinkedHashMap<>();
+                    for (JsonNode item : options.get("optionItems")) {
+                        if (item.has("value") && item.has("label")) {
+                            valueToLabel.put(item.get("value").asText(), item.get("label").asText());
+                        }
+                    }
+                    if (!valueToLabel.isEmpty()) {
+                        result.put(key, valueToLabel);
+                    }
+                }
+            }
+            if (widget.has("widgetList")) {
+                extractOptionItemPairs(widget.get("widgetList"), result);
+            }
+            if (widget.has("cols")) {
+                for (JsonNode col : widget.get("cols")) {
+                    if (col.has("widgetList")) {
+                        extractOptionItemPairs(col.get("widgetList"), result);
                     }
                 }
             }

@@ -21,5 +21,5 @@ public interface QcFormTemplateService {
     void extractAndStoreKeyLabelPairs(QcFormTemplateDTO template);
     QcFormTemplateDTO updateTemplateWithNodeSync(Long id, QcFormTemplateDTO dto);
     List<QcFormTemplateEditLogDTO> getEditLog(Long templateId);
-    List<java.util.Map<String, String>> getTemplateFields(Long templateId);
+    List<java.util.Map<String, Object>> getTemplateFields(Long templateId);
 }

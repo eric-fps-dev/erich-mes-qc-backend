@@ -81,6 +81,8 @@ public class ReportingServiceImpl implements ReportingService {
         List<WidgetDataDTO> widgetDataList = extractWidgetData(jsonInput);
         MongoDatabase database = mongoClient.getDatabase(mongoDatabaseName);
 
+        appendDeletedFields(formTemplateId, widgetDataList, database);
+
         // Use updated generateCollectionNames with default timestamps
         List<String> collectionNames = generateCollectionNames(formTemplateId, defaultStart, defaultEnd);
 
@@ -91,6 +93,58 @@ public class ReportingServiceImpl implements ReportingService {
         }
 
         return widgetDataList;
+    }
+
+    private void appendDeletedFields(Long formTemplateId, List<WidgetDataDTO> widgetDataList, MongoDatabase database) {
+        try {
+            MongoCollection<Document> pairsCollection = database.getCollection("form_template_key_label_pairs");
+            Document pairsDoc = pairsCollection.find(eq("qc_form_template_id", formTemplateId)).first();
+            if (pairsDoc == null) return;
+
+            List<Document> fields = pairsDoc.getList("fields", Document.class);
+            if (fields == null) return;
+
+            Document optionItemsDoc = pairsDoc.containsKey("option_items")
+                    ? (Document) pairsDoc.get("option_items")
+                    : new Document();
+
+            Set<String> existingNames = widgetDataList.stream()
+                    .map(WidgetDataDTO::getName)
+                    .collect(Collectors.toSet());
+
+            for (Document field : fields) {
+                if (!"true".equals(field.getString("deleted"))) continue;
+                String key = field.getString("key");
+                if (key == null || existingNames.contains(key)) continue;
+
+                String label = field.getString("label");
+                String type = field.getOrDefault("type", "other").toString();
+
+                if ("number".equals(type)) {
+                    WidgetDataDTO dto = new WidgetDataDTO(key, label, "number", new ArrayList<>(), null, null);
+                    dto.setDeleted(true);
+                    widgetDataList.add(dto);
+                } else if ("select".equals(type) || "radio".equals(type) || "checkbox".equals(type)) {
+                    List<OptionItemDTO> optionList = new ArrayList<>();
+                    if (optionItemsDoc.containsKey(key)) {
+                        Document valueToLabel = (Document) optionItemsDoc.get(key);
+                        for (String v : valueToLabel.keySet()) {
+                            try {
+                                int intValue = Integer.parseInt(v);
+                                optionList.add(new OptionItemDTO(valueToLabel.getString(v), intValue, 0));
+                            } catch (NumberFormatException ignored) {}
+                        }
+                    }
+                    if (!optionList.isEmpty()) {
+                        WidgetDataDTO dto = new WidgetDataDTO(key, label, type, optionList, null, null);
+                        dto.setDeleted(true);
+                        widgetDataList.add(dto);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // Non-fatal: deleted field append failure should not break chart loading
+        }
     }
 
     private void mergeWidgetDataLists(List<WidgetDataDTO> originalList, List<WidgetDataDTO> newList) {
@@ -884,12 +938,12 @@ public class ReportingServiceImpl implements ReportingService {
                 HashMap<String, String> valueToLabelMap = (HashMap<String, String>) optionItemsKeyValueMap.get(key);
 
                 List<String> resolvedLabels = valueList.stream()
-                        .map(val -> valueToLabelMap.getOrDefault(val.toString(), val.toString()))
+                        .map(val -> val != null ? valueToLabelMap.getOrDefault(val.toString(), val.toString()) : null)
                         .collect(Collectors.toList());
                 formattedDocument.put(formattedKey, resolvedLabels);
             }
-            // 如果 value 是单个数值并且有 label 映射，则转换
-            else if (optionItemsKeyValueMap.containsKey(key) && (value instanceof Integer || value instanceof String)) {
+            // 如果 value 有 label 映射，则转换（不限制类型）
+            else if (optionItemsKeyValueMap.containsKey(key) && value != null) {
                 HashMap<String, String> valueToLabelMap = (HashMap<String, String>) optionItemsKeyValueMap.get(key);
                 formattedDocument.put(formattedKey, valueToLabelMap.getOrDefault(value.toString(), value.toString()));
             } else {
@@ -987,6 +1041,62 @@ public class ReportingServiceImpl implements ReportingService {
             }
         } catch (Exception e) {
             throw new RuntimeException("Error parsing form template JSON", e);
+        }
+
+        // Supplement with historical option items from form_template_key_label_pairs for deleted fields
+        try {
+            MongoDatabase database = mongoClient.getDatabase(mongoDatabaseName);
+            MongoCollection<Document> pairsCollection = database.getCollection("form_template_key_label_pairs");
+            Document pairsDoc = pairsCollection.find(eq("qc_form_template_id", formId)).first();
+            if (pairsDoc != null && pairsDoc.containsKey("option_items")) {
+                Document storedOptionItems = (Document) pairsDoc.get("option_items");
+                for (String fieldKey : storedOptionItems.keySet()) {
+                    if (!optionItemsKeyValueMap.containsKey(fieldKey)) {
+                        Document mapping = (Document) storedOptionItems.get(fieldKey);
+                        HashMap<String, String> valueToLabel = new HashMap<>();
+                        for (String v : mapping.keySet()) {
+                            valueToLabel.put(v, mapping.getString(v));
+                        }
+                        optionItemsKeyValueMap.put(fieldKey, valueToLabel);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // Non-critical: log and continue with whatever was resolved from current template
+        }
+
+        // Final fallback: control_limit_setting.control_limits[field].optionItems
+        // This is always kept up-to-date (including deleted fields) by mergeControlLimitSettings.
+        try {
+            MongoDatabase database = mongoClient.getDatabase(mongoDatabaseName);
+            MongoCollection<Document> clsCollection = database.getCollection("control_limit_setting");
+            Document clsDoc = clsCollection.find(eq("qc_form_template_id", formId)).first();
+            if (clsDoc != null && clsDoc.containsKey("control_limits")) {
+                Document controlLimits = (Document) clsDoc.get("control_limits");
+                for (String fieldKey : controlLimits.keySet()) {
+                    if (!optionItemsKeyValueMap.containsKey(fieldKey)) {
+                        Object entry = controlLimits.get(fieldKey);
+                        if (entry instanceof Document) {
+                            List<Document> optionItems = ((Document) entry).getList("optionItems", Document.class);
+                            if (optionItems != null && !optionItems.isEmpty()) {
+                                HashMap<String, String> valueToLabel = new HashMap<>();
+                                for (Document item : optionItems) {
+                                    Object val = item.get("value");
+                                    String lbl = item.getString("label");
+                                    if (val != null && lbl != null) {
+                                        valueToLabel.put(val.toString(), lbl);
+                                    }
+                                }
+                                if (!valueToLabel.isEmpty()) {
+                                    optionItemsKeyValueMap.put(fieldKey, valueToLabel);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // Non-critical
         }
 
         return optionItemsKeyValueMap;
