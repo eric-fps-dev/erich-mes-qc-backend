@@ -139,17 +139,6 @@ public class SPCServiceImpl implements SPCService {
         for (String collectionName : collectionNames) {
             MongoCollection<Document> collection = database.getCollection(collectionName);
             for (Document doc : collection.find(filter)) {
-                Timestamp createdAt = Timestamp.from(doc.getDate("created_at").toInstant());
-                for (String wantedField : wantedLimits) {
-                    if (doc.get(wantedField) != null) {
-                        Object raw = doc.get(wantedField);
-                        Double value;
-                        if (raw instanceof Number) {
-                            value = ((Number) raw).doubleValue();
-                        } else {
-                            try { value = Double.parseDouble(raw.toString()); }
-                            catch (NumberFormatException e) { continue; }
-                        }
                 String groupId = doc.getString("version_group_id");
                 if (groupId != null) {
                     int version = doc.getInteger("version", 0);
