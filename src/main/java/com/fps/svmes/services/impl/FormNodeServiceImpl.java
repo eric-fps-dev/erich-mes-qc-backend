@@ -1,7 +1,9 @@
 package com.fps.svmes.services.impl;
 
 import com.fps.svmes.models.nosql.FormNode;
-//import com.fps.svmes.repositories.jpaRepo.user.TeamFormRepository;
+import com.fps.svmes.models.sql.qcForm.QcFormTemplate;
+import com.fps.svmes.repositories.jpaRepo.qcForm.QcFormTemplateRepository;
+import com.fps.svmes.repositories.jpaRepo.user.TeamFormRepository;
 import com.fps.svmes.repositories.mongoRepo.FormNodeRepository;
 import com.fps.svmes.services.FormNodeService;
 import org.slf4j.Logger;
@@ -21,6 +23,9 @@ public class FormNodeServiceImpl implements FormNodeService {
     // TODO: add after adding missing data model in common module
 //    @Autowired
 //    private TeamFormRepository teamFormRepository;
+
+    @Autowired
+    private QcFormTemplateRepository qcFormTemplateRepository;
 
     public static final Logger logger = LoggerFactory.getLogger(FormNodeServiceImpl.class);
 
@@ -77,9 +82,8 @@ public class FormNodeServiceImpl implements FormNodeService {
                 // Clean team-form association for deleted form node
                 List<String> formNodeArr = new ArrayList<>();
                 collectFormIdsRecursively(nodes.get(i), formNodeArr);
-
-                // TODO: add after adding missing data model in commmon module
-                // teamFormRepository.deleteAllByFormIds(formNodeArr);
+                teamFormRepository.deleteAllByFormIds(formNodeArr);
+                softDeleteTemplatesRecursively(nodes.get(i));
 
                 nodes.remove(i); // Remove the root node
                 repository.deleteById(id); // Persist the deletion
@@ -121,9 +125,8 @@ public class FormNodeServiceImpl implements FormNodeService {
                     // Clean team-form association for deleted form node
                     List<String> formNodeArr = new ArrayList<>();
                     collectFormIdsRecursively(child, formNodeArr);
-
-                    // TODO: add after adding missing data model in commmon module
-//                    teamFormRepository.deleteAllByFormIds(formNodeArr);
+                    teamFormRepository.deleteAllByFormIds(formNodeArr);
+                    softDeleteTemplatesRecursively(child);
 
                     currentNode.getChildren().remove(i); // Remove the matching child node
 
@@ -357,6 +360,21 @@ public class FormNodeServiceImpl implements FormNodeService {
         if (node.getChildren() != null) {
             for (FormNode child : node.getChildren()) {
                 collectFormIdsRecursively(child, result);
+            }
+        }
+    }
+
+    // Collect all qcFormTemplateIds under a node and set their status to 0.
+    private void softDeleteTemplatesRecursively(FormNode node) {
+        if ("document".equalsIgnoreCase(node.getNodeType()) && node.getQcFormTemplateId() != null) {
+            qcFormTemplateRepository.findById(node.getQcFormTemplateId()).ifPresent(template -> {
+                template.setStatus(0);
+                qcFormTemplateRepository.save(template);
+            });
+        }
+        if (node.getChildren() != null) {
+            for (FormNode child : node.getChildren()) {
+                softDeleteTemplatesRecursively(child);
             }
         }
     }
