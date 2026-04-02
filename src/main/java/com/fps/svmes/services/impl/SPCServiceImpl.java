@@ -154,15 +154,27 @@ public class SPCServiceImpl implements SPCService {
 
         // build time series map using deduplicated documents
         for (Document doc : latestVersionMap.values()) {
-            Timestamp createdAt = Timestamp.from(doc.getDate("created_at").toInstant());
+            Date createdAtDate = doc.getDate("created_at");
+            if (createdAtDate == null) continue;
+            Timestamp createdAt = new Timestamp(createdAtDate.getTime());
             for (String wantedField : wantedLimits) {
-                if (doc.get(wantedField) != null) {
-                    Double value = ((Number) doc.get(wantedField)).doubleValue();
+                Object rawValue = doc.get(wantedField);
+                if (rawValue instanceof Number) {
+                    Double value = ((Number) rawValue).doubleValue();
                     TimeSeriesDTO timeSeriesDTO = new TimeSeriesDTO();
                     timeSeriesDTO.setTimestamp(createdAt);
                     timeSeriesDTO.setValue(value);
-
                     timeSeriesMap.get(wantedField).add(timeSeriesDTO);
+                } else if (rawValue instanceof List<?> list && !list.isEmpty()) {
+                    // If it's a list, check the first element
+                    Object firstElement = list.get(0);
+                    if (firstElement instanceof Number) {
+                        Double value = ((Number) firstElement).doubleValue();
+                        TimeSeriesDTO timeSeriesDTO = new TimeSeriesDTO();
+                        timeSeriesDTO.setTimestamp(createdAt);
+                        timeSeriesDTO.setValue(value);
+                        timeSeriesMap.get(wantedField).add(timeSeriesDTO);
+                    }
                 }
             }
         }
