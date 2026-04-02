@@ -25,6 +25,7 @@ import java.sql.Time;
 import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 public class SPCServiceImpl implements SPCService {
@@ -60,6 +61,25 @@ public class SPCServiceImpl implements SPCService {
         Optional<ControlLimitSetting> controlLimits = controlLimitSettingRepository.findByQcFormTemplateId(request.getFormTemplateId());
         List<String> wantedLimits = new ArrayList<>();
 
+        // Query form_template_key_label_pairs for deleted fields
+        Map<String, String> deletedKeyToLabel = new LinkedHashMap<>();
+        {
+            MongoCollection<Document> pairsCollection = database.getCollection("form_template_key_label_pairs");
+            Document pairsDoc = pairsCollection.find(Filters.eq("qc_form_template_id", request.getFormTemplateId())).first();
+            if (pairsDoc != null && pairsDoc.containsKey("fields")) {
+                List<Document> fields = pairsDoc.getList("fields", Document.class);
+                for (Document f : fields) {
+                    if ("true".equals(f.getString("deleted"))) {
+                        String key = f.getString("key");
+                        String label = f.getString("label");
+                        if (key != null && label != null) {
+                            deletedKeyToLabel.put(key, label);
+                        }
+                    }
+                }
+            }
+        }
+
         // if control limits exist, get only those with LOWER and UPPER limits and set the desired fields
         if (controlLimits.isPresent()) {
             // TODO: refactor once the limit structures are updated
@@ -72,13 +92,28 @@ public class SPCServiceImpl implements SPCService {
                     .map(Map.Entry::getKey)
                     .toList();
             if (request.getFields() != null && !request.getFields().isEmpty()) {
-                if (validLimits.containsAll(request.getFields())) {
-                    wantedLimits = request.getFields();
-                } else {
+                List<String> activeRequested = request.getFields().stream()
+                        .filter(f -> !deletedKeyToLabel.containsKey(f))
+                        .collect(Collectors.toList());
+                List<String> deletedRequested = request.getFields().stream()
+                        .filter(deletedKeyToLabel::containsKey)
+                        .collect(Collectors.toList());
+                if (!validLimits.containsAll(activeRequested)) {
                     throw new IllegalArgumentException("Invalid field(s) given. Accepted fields: " + validLimits);
                 }
+                wantedLimits = new ArrayList<>(activeRequested);
+                wantedLimits.addAll(deletedRequested);
             } else {
-                wantedLimits = validLimits;
+                wantedLimits = new ArrayList<>(validLimits);
+                wantedLimits.addAll(deletedKeyToLabel.keySet());
+            }
+        } else {
+            if (request.getFields() != null && !request.getFields().isEmpty()) {
+                wantedLimits = request.getFields().stream()
+                        .filter(deletedKeyToLabel::containsKey)
+                        .collect(Collectors.toList());
+            } else {
+                wantedLimits = new ArrayList<>(deletedKeyToLabel.keySet());
             }
         }
 
@@ -98,7 +133,9 @@ public class SPCServiceImpl implements SPCService {
                 Filters.lte("created_at", end)
         );
 
-        // build time series map using field as keys
+        // Collect all matching documents across shards, deduplicate by version_group_id
+        // keeping only the highest version per group (same logic as ReportingServiceImpl)
+        Map<String, Document> latestVersionMap = new LinkedHashMap<>();
         for (String collectionName : collectionNames) {
             MongoCollection<Document> collection = database.getCollection(collectionName);
             for (Document doc : collection.find(filter)) {
@@ -113,10 +150,40 @@ public class SPCServiceImpl implements SPCService {
                             try { value = Double.parseDouble(raw.toString()); }
                             catch (NumberFormatException e) { continue; }
                         }
+                String groupId = doc.getString("version_group_id");
+                if (groupId != null) {
+                    int version = doc.getInteger("version", 0);
+                    Document existing = latestVersionMap.get(groupId);
+                    if (existing == null || version > existing.getInteger("version", 0)) {
+                        latestVersionMap.put(groupId, doc);
+                    }
+                } else {
+                    latestVersionMap.put(doc.getObjectId("_id").toString(), doc);
+                }
+            }
+        }
+
+        // build time series map using deduplicated documents
+        for (Document doc : latestVersionMap.values()) {
+            Date createdAtDate = doc.getDate("created_at");
+            if (createdAtDate == null) continue;
+            Timestamp createdAt = new Timestamp(createdAtDate.getTime());
+            for (String wantedField : wantedLimits) {
+                Object rawValue = doc.get(wantedField);
+                if (rawValue instanceof Number) {
+                    Double value = ((Number) rawValue).doubleValue();
+                    TimeSeriesDTO timeSeriesDTO = new TimeSeriesDTO();
+                    timeSeriesDTO.setTimestamp(createdAt);
+                    timeSeriesDTO.setValue(value);
+                    timeSeriesMap.get(wantedField).add(timeSeriesDTO);
+                } else if (rawValue instanceof List<?> list && !list.isEmpty()) {
+                    // If it's a list, check the first element
+                    Object firstElement = list.get(0);
+                    if (firstElement instanceof Number) {
+                        Double value = ((Number) firstElement).doubleValue();
                         TimeSeriesDTO timeSeriesDTO = new TimeSeriesDTO();
                         timeSeriesDTO.setTimestamp(createdAt);
                         timeSeriesDTO.setValue(value);
-
                         timeSeriesMap.get(wantedField).add(timeSeriesDTO);
                     }
                 }
@@ -124,16 +191,22 @@ public class SPCServiceImpl implements SPCService {
         }
 
         // build SPCDTO to append to return list
+        Map<String, ControlLimitSetting.ControlLimitEntry> controlLimitMap = controlLimits.isPresent()
+                ? controlLimits.get().getControlLimits()
+                : Collections.emptyMap();
         for (String fieldName : wantedLimits) {
             SPCDTO spcdto = new SPCDTO();
-            spcdto.setFieldName(controlLimits.get().getControlLimits().get(fieldName).getLabel());
             spcdto.setFieldId(fieldName);
 
-            LimitDTO limits = new LimitDTO(
-                    controlLimits.get().getControlLimits().get(fieldName).getLowerControlLimit(),
-                    controlLimits.get().getControlLimits().get(fieldName).getUpperControlLimit()
-            );
-            spcdto.setLimits(limits);
+            ControlLimitSetting.ControlLimitEntry entry = controlLimitMap.get(fieldName);
+            if (entry != null) {
+                spcdto.setFieldName(entry.getLabel());
+                spcdto.setLimits(new LimitDTO(entry.getLowerControlLimit(), entry.getUpperControlLimit()));
+            } else {
+                // Deleted field without a control limit entry — use label from form_template_key_label_pairs
+                spcdto.setFieldName(deletedKeyToLabel.getOrDefault(fieldName, fieldName));
+                spcdto.setLimits(new LimitDTO(null, null));
+            }
 
             List<TimeSeriesDTO> timeSeriesList = timeSeriesMap.get(fieldName);
             spcdto.setTimeSeries(timeSeriesList);

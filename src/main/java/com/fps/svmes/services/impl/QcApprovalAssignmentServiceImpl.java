@@ -38,7 +38,6 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class QcApprovalAssignmentServiceImpl implements QcApprovalAssignmentService {
 
-    private final QcApprovalAssignmentRepository repository;
     private final ModelMapper modelMapper;
     private final QcApprovalAssignmentRepository qcApprovalAssignmentRepository;
     private final MongoClient mongoClient;
@@ -54,16 +53,16 @@ public class QcApprovalAssignmentServiceImpl implements QcApprovalAssignmentServ
 
     @Override
     public void insertIfNotExists(QcApprovalAssignmentDTO dto) {
-        Optional<QcApprovalAssignment> existing = repository.findBySubmissionId(dto.getSubmissionId());
+        Optional<QcApprovalAssignment> existing = qcApprovalAssignmentRepository.findBySubmissionId(dto.getSubmissionId());
         if (existing.isEmpty()) {
             QcApprovalAssignment entity = modelMapper.map(dto, QcApprovalAssignment.class);
-            repository.save(entity);
+            qcApprovalAssignmentRepository.save(entity);
         }
     }
 
     @Override
     public Page<QcApprovalAssignmentDTO> getAllAssignments(Pageable pageable) {
-        return repository.findAll(pageable)
+        return qcApprovalAssignmentRepository.findAll(pageable)
                 .map(entity -> modelMapper.map(entity, QcApprovalAssignmentDTO.class));
     }
 
@@ -143,7 +142,7 @@ public class QcApprovalAssignmentServiceImpl implements QcApprovalAssignmentServ
 
     @Transactional
     @Override
-    public void approveAction(String submissionId, String collectionName, String approverRole, Integer approverId, String comment, boolean suggestRetest, String eSignatureBase64) {
+    public void approveAction(String submissionId, String collectionName, Integer approverId, String comment, boolean suggestRetest, String eSignatureBase64) {
         MongoDatabase database = mongoClient.getDatabase(mongoDatabaseName);
         MongoCollection<Document> collection = database.getCollection(collectionName);
 
@@ -162,14 +161,14 @@ public class QcApprovalAssignmentServiceImpl implements QcApprovalAssignmentServ
         int currentIndex = -1;
         for (int i = 0; i < approvalInfo.size(); i++) {
             Document step = approvalInfo.get(i);
-            if ("pending".equals(step.getString("status")) && approverRole.equals(step.getString("role"))) {
+            if ("pending".equals(step.getString("status"))) {
                 currentIndex = i;
                 break;
             }
         }
 
         if (currentIndex == -1) {
-            throw new RuntimeException("❌ No pending approval step found for role: " + approverRole);
+            throw new RuntimeException("❌ No pending approval step found");
         }
 
         // Step 3: Update current step
@@ -183,18 +182,23 @@ public class QcApprovalAssignmentServiceImpl implements QcApprovalAssignmentServ
         currentStep.put("status", "completed");
 
         // Step 4: Advance next step
-        Document nextStep = null;
-        AtomicReference<String> nextRoleRef = new AtomicReference<>(null);
+        Document nextStep;
+        String nextRole;
 
         if (currentIndex + 1 < approvalInfo.size()) {
             nextStep = approvalInfo.get(currentIndex + 1);
-            nextRoleRef.set(nextStep.getString("role"));
+            nextRole = nextStep.getString("role");
 
-            if ("supervisor".equals(nextRoleRef.get())) {
-                nextStep.put("status", "pending");
-            } else {
+            if ("archive".equals(nextRole)) {
+                // auto-complete archive step
                 nextStep.put("status", "completed");
+                nextStep.put("timestamp", new Date());
+            } else {
+                // next human step becomes pending
+                nextStep.put("status", "pending");
             }
+        } else {
+            nextRole = null;
         }
 
         // Step 5: Update back to MongoDB
@@ -205,27 +209,27 @@ public class QcApprovalAssignmentServiceImpl implements QcApprovalAssignmentServ
         );
 
         // Step 6: Update PostgreSQL snapshot state
-        repository.findBySubmissionId(submissionId).ifPresent(snapshot -> {
-            String nextRole = nextRoleRef.get();
-            String updatedState;
-            if ("leader".equals(approverRole)) {
-                if ("archive".equals(nextRole)) {
-                    updatedState = "fully_approved";
-                } else {
-                    updatedState = "pending_supervisor";
-                }
-            } else if ("supervisor".equals(approverRole)) {
-                updatedState = "fully_approved";
-            } else {
-                updatedState = "pending_leader";
-            }
+        qcApprovalAssignmentRepository.findBySubmissionId(submissionId).ifPresent(snapshot -> {
+            String updatedState = computeSnapshotStateFromNextRole(nextRole);
 
             snapshot.setState(updatedState);
             snapshot.setUpdatedAt(OffsetDateTime.now());
-            repository.save(snapshot);
+            qcApprovalAssignmentRepository.save(snapshot);
         });
+    }
 
-
+    private String computeSnapshotStateFromNextRole(String nextRole) {
+        if (nextRole == null || "archive".equals(nextRole)) {
+            return "fully_approved";
+        }
+        if ("leader".equals(nextRole)) {
+            return "pending_leader";
+        }
+        if ("supervisor".equals(nextRole)) {
+            return "pending_supervisor";
+        }
+        // Fallback for unexpected roles
+        return "fully_approved";
     }
 
     @Override

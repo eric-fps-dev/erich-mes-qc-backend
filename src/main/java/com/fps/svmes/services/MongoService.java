@@ -44,4 +44,13 @@ public interface MongoService {
      */
     void deleteOne(String collectionName, Document filter);
 
+    /**
+     * Finds one document in a MongoDB collection matching the filter.
+     *
+     * @param collectionName Name of the collection
+     * @param filter Filter to find the document
+     * @return The matching document, or null if not found
+     */
+    Document findOne(String collectionName, Document filter);
+
 }

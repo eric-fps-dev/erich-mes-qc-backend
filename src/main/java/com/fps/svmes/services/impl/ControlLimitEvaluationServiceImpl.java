@@ -102,16 +102,20 @@ public class ControlLimitEvaluationServiceImpl implements ControlLimitEvaluation
                                 ? list.stream().map(Object::toString).toList()
                                 : List.of(valueObj.toString());
 
-                        // 1. 所有选项
+                        // 1. All option values; option_labels stores only the VALID ones
+                        //    so that control_range can be derived directly by joining option_labels
                         List<String> allOptionValues = limit.getOptionItems() != null
                                 ? limit.getOptionItems().stream().map(item -> item.getValue()).toList()
                                 : List.of();
-                        List<String> allOptionLabels = limit.getOptionItems() != null
-                                ? limit.getOptionItems().stream().map(item -> item.getLabel()).toList()
+                        List<String> validOptionLabels = limit.getOptionItems() != null
+                                ? limit.getOptionItems().stream()
+                                        .filter(item -> limit.getValidKeys().contains(item.getValue()))
+                                        .map(item -> item.getLabel())
+                                        .toList()
                                 : List.of();
 
                         alert.setOptionItems(allOptionValues);
-                        alert.setOptionLabels(allOptionLabels);
+                        alert.setOptionLabels(validOptionLabels);
 
                         // 2. 从用户输入中识别无效项
                         List<String> invalidValues = selectedValues.stream()

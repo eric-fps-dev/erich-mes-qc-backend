@@ -41,6 +41,12 @@
 			<artifactId>spring-boot-starter-data-mongodb</artifactId>
 		</dependency>
 
+        <!-- Spring Boot Redis -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-security</artifactId>
@@ -156,7 +162,13 @@
 			<version>9.2.1</version>
 		</dependency>
 
+        <dependency>
+            <groupId>com.fps.shared</groupId>
+            <artifactId>common-module</artifactId>
+            <version>1.2.80-RELEASE</version>
+        </dependency>
 	</dependencies>
+
 	<dependencyManagement>
 		<dependencies>
 			<dependency>
@@ -168,6 +180,21 @@
 			</dependency>
 		</dependencies>
 	</dependencyManagement>
+
+    <repositories>
+        <repository>
+            <id>nexus</id>
+            <name>maven-releases</name>
+            <url>http://3.135.193.170:8081/repository/maven-releases/</url>
+            <releases>
+                <enabled>true</enabled>
+                <updatePolicy>always</updatePolicy>
+            </releases>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+        </repository>
+    </repositories>
 
 	<build>
 		<plugins>

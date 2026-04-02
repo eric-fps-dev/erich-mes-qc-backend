@@ -20,8 +20,9 @@ public class FormNodeServiceImpl implements FormNodeService {
     @Autowired
     private FormNodeRepository repository;
 
-    @Autowired
-    private TeamFormRepository teamFormRepository;
+    // TODO: add after adding missing data model in common module
+//    @Autowired
+//    private TeamFormRepository teamFormRepository;
 
     @Autowired
     private QcFormTemplateRepository qcFormTemplateRepository;
@@ -324,6 +325,30 @@ public class FormNodeServiceImpl implements FormNodeService {
                 findMatchingNodesRecursively(child, keyword, matchingNodes);
             }
         }
+    }
+
+    @Override
+    public void updateLabelByQcFormTemplateId(Long qcFormTemplateId, String newLabel) {
+        List<FormNode> roots = getAllNodes();
+        for (FormNode root : roots) {
+            if (updateLabelRecursive(root, qcFormTemplateId, newLabel)) {
+                saveNode(root);
+            }
+        }
+    }
+
+    private boolean updateLabelRecursive(FormNode node, Long templateId, String newLabel) {
+        boolean updated = false;
+        if (templateId.equals(node.getQcFormTemplateId())) {
+            node.setLabel(newLabel);
+            updated = true;
+        }
+        if (node.getChildren() != null) {
+            for (FormNode child : node.getChildren()) {
+                if (updateLabelRecursive(child, templateId, newLabel)) updated = true;
+            }
+        }
+        return updated;
     }
 
     // Grab all document type node ids for a target node.
