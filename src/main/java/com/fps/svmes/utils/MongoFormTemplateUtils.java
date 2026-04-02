@@ -3,11 +3,12 @@ package com.fps.svmes.utils;
 import com.fps.svmes.repositories.jpaRepo.qcForm.QcFormTemplateRepository;
 
 import com.fps.svmes.repositories.jpaRepo.user.UserRepository;
-import com.itextpdf.text.Paragraph;
-import com.mongodb.client.MongoCollection;
 import org.bson.Document;
 import org.bson.types.ObjectId;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.stereotype.Component;
 
 import java.util.*;
@@ -22,6 +23,9 @@ public class MongoFormTemplateUtils {
     @Autowired
     private UserRepository userRepository;
 
+    @Autowired
+    private MongoTemplate mongoTemplate;
+
     public HashMap<String, String> getFormTemplateKeyValueMapping(Long formId) {
         String formTemplateJson = qcFormTemplateRepository.findFormTemplateJsonById(formId);
         if (formTemplateJson == null || formTemplateJson.isEmpty()) {
@@ -34,6 +38,26 @@ public class MongoFormTemplateUtils {
         if (widgetList != null) {
             extractKeyValuePairs(widgetList, keyValueMap);
         }
+
+        // Supplement with historical field mappings for deleted fields
+        try {
+            Query pairsQuery = new Query();
+            pairsQuery.addCriteria(Criteria.where("qc_form_template_id").is(formId));
+            Document pairsDoc = mongoTemplate.findOne(pairsQuery, Document.class, "form_template_key_label_pairs");
+            if (pairsDoc != null && pairsDoc.containsKey("fields")) {
+                List<Document> fields = pairsDoc.getList("fields", Document.class);
+                for (Document field : fields) {
+                    String key = field.getString("key");
+                    String label = field.getString("label");
+                    if (key != null && label != null && !keyValueMap.containsKey(key)) {
+                        keyValueMap.put(key, label);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // Non-fatal: proceed without historical mappings
+        }
+
         return keyValueMap;
     }
 
@@ -49,6 +73,29 @@ public class MongoFormTemplateUtils {
         if (widgetList != null) {
             extractOptionItems(widgetList, optionItemsKeyValueMap);
         }
+
+        // Supplement with historical option items for deleted fields
+        try {
+            Query pairsQuery = new Query();
+            pairsQuery.addCriteria(Criteria.where("qc_form_template_id").is(formId));
+            Document pairsDoc = mongoTemplate.findOne(pairsQuery, Document.class, "form_template_key_label_pairs");
+            if (pairsDoc != null && pairsDoc.containsKey("option_items")) {
+                Document storedOptionItems = (Document) pairsDoc.get("option_items");
+                for (String fieldKey : storedOptionItems.keySet()) {
+                    if (!optionItemsKeyValueMap.containsKey(fieldKey)) {
+                        Document mapping = (Document) storedOptionItems.get(fieldKey);
+                        HashMap<String, String> valueToLabel = new HashMap<>();
+                        for (String v : mapping.keySet()) {
+                            valueToLabel.put(v, mapping.getString(v));
+                        }
+                        optionItemsKeyValueMap.put(fieldKey, valueToLabel);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // Non-fatal: proceed without historical option items
+        }
+
         return optionItemsKeyValueMap;
     }
 

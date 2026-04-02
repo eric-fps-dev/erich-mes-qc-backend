@@ -24,6 +24,8 @@ public class WidgetDataDTO {
     private List<String> bucketLabels;                      // ["2024-01-01", "2024-01-02", ...]
     private String bucketType;                              // "hourly", "daily", "weekly"
 
+    private boolean deleted;
+
     public WidgetDataDTO(String name, String label, String type, List<OptionItemDTO> optionItems, List<Double> chartData, List<String> xaxisData) {
         this.name = name;
         this.label = label;

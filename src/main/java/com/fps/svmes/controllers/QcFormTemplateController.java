@@ -2,8 +2,11 @@
 package com.fps.svmes.controllers;
 
 import com.fps.svmes.dto.dtos.qcForm.QcFormTemplateDTO;
+import com.fps.svmes.dto.dtos.qcForm.QcFormTemplateEditLogDTO;
 import com.fps.svmes.dto.requests.TemplateFormRequest;
 import com.fps.svmes.dto.responses.ResponseResult;
+import com.fps.svmes.models.sql.qcForm.QcFormTemplateEditLog;
+import com.fps.svmes.repositories.jpaRepo.qcForm.QcFormTemplateEditLogRepository;
 import com.fps.svmes.models.nosql.FormNode;
 import com.fps.svmes.services.FormNodeService;
 import com.fps.svmes.services.MongoService;
@@ -14,9 +17,11 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -32,6 +37,7 @@ public class QcFormTemplateController {
     private final FormNodeService formNodeService;
 
     private final MongoService mongoService;
+    private final QcFormTemplateEditLogRepository editLogRepository;
     private static final Logger logger = LoggerFactory.getLogger(QcFormTemplateController.class);
 
     @GetMapping
@@ -133,11 +139,61 @@ public class QcFormTemplateController {
             // Step 5: Create the control limit setting in the recipe library
             service.createControlLimitSetting(template);
 
+            // Step 6: Write creation audit log
+            QcFormTemplateEditLog creationLog = new QcFormTemplateEditLog();
+            creationLog.setTemplateId(template.getId());
+            creationLog.setEditedBy(request.getForm().getCreatedBy() != null
+                    ? request.getForm().getCreatedBy().longValue() : 0L);
+            creationLog.setEditedAt(OffsetDateTime.now());
+            creationLog.setChangeSummary("Template created");
+            editLogRepository.save(creationLog);
+
             logger.info("Template, nodes, and collection created successfully for multiple parent folders!");
             return ResponseResult.success(null);
         } catch (Exception e) {
             logger.error("Error creating template, nodes, or collection", e);
             return ResponseResult.fail("Failed to create template with nodes and collection", e);
+        }
+    }
+
+    @PutMapping("/{id}/full-update")
+    @Operation(summary = "Full update with node sync and audit log",
+            description = "Updates a QC form template, syncs FormNode labels, and writes an audit log entry.")
+    public ResponseEntity<?> fullUpdateTemplate(
+            @PathVariable Long id,
+            @RequestBody QcFormTemplateDTO dto) {
+        try {
+            QcFormTemplateDTO result = service.updateTemplateWithNodeSync(id, dto);
+            return ResponseEntity.ok(ResponseResult.success(result));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(400).body(e.getMessage());
+        } catch (Exception e) {
+            log.error("Error updating template", e);
+            return ResponseEntity.status(500).body("Error: " + e.getMessage());
+        }
+    }
+
+    @GetMapping("/{id}/edit-log")
+    @Operation(summary = "Get edit log for a template",
+            description = "Returns the audit log entries for a QC form template.")
+    public ResponseEntity<?> getEditLog(@PathVariable Long id) {
+        try {
+            List<QcFormTemplateEditLogDTO> logs = service.getEditLog(id);
+            return ResponseEntity.ok(ResponseResult.success(logs));
+        } catch (Exception e) {
+            log.error("Error fetching edit log", e);
+            return ResponseEntity.status(500).body("Error: " + e.getMessage());
+        }
+    }
+
+    @GetMapping("/{id}/fields")
+    @Operation(summary = "Get all fields for a template including soft-deleted ones")
+    public ResponseEntity<?> getTemplateFields(@PathVariable Long id) {
+        try {
+            return ResponseEntity.ok(ResponseResult.success(service.getTemplateFields(id)));
+        } catch (Exception e) {
+            log.error("Error fetching template fields", e);
+            return ResponseEntity.status(500).body("Error: " + e.getMessage());
         }
     }
 
