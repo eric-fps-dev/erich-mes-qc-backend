@@ -377,7 +377,7 @@ public class ReportingServiceImpl implements ReportingService {
                         Date rawDate = doc.getDate("created_at");
                         if (rawDate != null) {
                              String formattedDate = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
-                                     .withZone(ZoneId.systemDefault())
+                                     .withZone(ZoneId.of("UTC"))
                                      .format(rawDate.toInstant());
                              xaxisData.add(formattedDate);
                         }

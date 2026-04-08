@@ -15,6 +15,7 @@ public interface AlertRecordService {
     AlertRecordDTO updateRecord(Long alertId, Integer newRpn, Long userId);
     AlertRecordDTO deleteRecord(Long alertId, Long userId);
     AlertSummaryDTO getAlertSummary();
+    AlertSummaryDTO getAlertSummary(AlertRecordFilterRequest request);
     Page<DetailedAlertRecordDTO> filterAlertRecords(AlertRecordFilterRequest request);
     void deleteBySubmissionIds(List<String> submissionIds);
 

@@ -496,6 +496,74 @@ public class AlertRecordServiceImpl implements AlertRecordService {
         return summary;
     }
 
+    @Override
+    public AlertSummaryDTO getAlertSummary(AlertRecordFilterRequest request) {
+        List<AlertRecord> alerts = alertRecordRepository.findAll(buildFilterSpecification(request));
+
+        Set<Integer> alertStatusIds = alerts.stream()
+                .map(AlertRecord::getAlertStatus)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<Integer, AlertStatus> alertStatusMap = alertStatusRepository.findAllById(alertStatusIds)
+                .stream()
+                .collect(Collectors.toMap(AlertStatus::getId, a -> a));
+
+        Map<String, Long> alertStatusCounts = alerts.stream()
+                .filter(alert -> alert.getAlertStatus() != null)
+                .collect(Collectors.groupingBy(
+                        alert -> Optional.ofNullable(alertStatusMap.get(alert.getAlertStatus()))
+                                .map(AlertStatus::getName)
+                                .orElse("未知"),
+                        Collectors.counting()
+                ));
+
+        Set<Integer> riskLevelIds = alerts.stream()
+                .map(AlertRecord::getRiskLevelId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<Integer, RiskLevel> riskMap = riskLevelRepository.findAllById(riskLevelIds)
+                .stream()
+                .collect(Collectors.toMap(RiskLevel::getId, r -> r));
+
+        Map<String, Long> riskLevelCounts = alerts.stream()
+                .filter(alert -> alert.getRiskLevelId() != null)
+                .collect(Collectors.groupingBy(
+                        alert -> Optional.ofNullable(riskMap.get(alert.getRiskLevelId()))
+                                .map(RiskLevel::getName)
+                                .orElse("未知"),
+                        Collectors.counting()
+                ));
+
+        Map<String, Long> inspectionItemCounts = alerts.stream()
+                .collect(Collectors.groupingBy(
+                        alert -> Optional.ofNullable(alert.getInspectionItemLabel()).orElse("[未知检测项]"),
+                        Collectors.counting()
+                ));
+
+        Set<Long> productIds = alerts.stream()
+                .flatMap(alert -> alert.getAlertProducts().stream())
+                .map(AlertProduct::getProductId)
+                .collect(Collectors.toSet());
+        Map<Long, SuggestedProduct> productMap = suggestedProductRepository.findAllById(productIds)
+                .stream()
+                .collect(Collectors.toMap(SuggestedProduct::getId, p -> p));
+        Map<String, Long> productCounts = alerts.stream()
+                .flatMap(alert -> alert.getAlertProducts().stream())
+                .collect(Collectors.groupingBy(
+                        product -> Optional.ofNullable(productMap.get(product.getProductId()))
+                                .map(SuggestedProduct::getName)
+                                .orElse("未知"),
+                        Collectors.counting()
+                ));
+
+        AlertSummaryDTO summary = new AlertSummaryDTO();
+        summary.setInspectionItemCounts(inspectionItemCounts);
+        summary.setRiskLevelCounts(riskLevelCounts);
+        summary.setProductCounts(productCounts);
+        summary.setAlertStatusCounts(alertStatusCounts);
+        return summary;
+    }
+
     private Integer toInt(Number n) {
         return n == null ? null : n.intValue();
     }
@@ -536,56 +604,7 @@ public class AlertRecordServiceImpl implements AlertRecordService {
             pageable = PageRequest.of(request.getPage(), request.getSize());
         }
 
-        Specification<AlertRecord> spec = (root, query, cb) -> {
-            List<Predicate> predicates = new ArrayList<>();
-            if (request.getStatus() != null) {
-                predicates.add(cb.equal(root.get("status"), request.getStatus()));
-            }
-
-            if (request.getFilters() != null) {
-                String statusId = request.getFilters().get("alertStatusId");
-                if (StringUtils.hasText(statusId)) {
-                    predicates.add(cb.equal(root.get("alertStatus"), Integer.valueOf(statusId)));
-                }
-
-                String riskLevelId = request.getFilters().get("riskLevelId");
-                if (StringUtils.hasText(riskLevelId)) {
-                    predicates.add(cb.equal(root.get("riskLevelId"), Integer.valueOf(riskLevelId)));
-                }
-
-                String productId = request.getFilters().get("suggestedProductId");
-                if (StringUtils.hasText(productId)) {
-                    Join<AlertRecord, AlertProduct> productJoin = root.join("alertProducts", JoinType.LEFT);
-                    predicates.add(cb.equal(productJoin.get("productId"), Long.valueOf(productId)));
-                }
-
-                String batchId = request.getFilters().get("suggestedBatchId");
-                if (StringUtils.hasText(batchId)) {
-                    Join<AlertRecord, AlertBatch> batchJoin = root.join("alertBatches", JoinType.LEFT);
-                    predicates.add(cb.equal(batchJoin.get("batchId"), Long.valueOf(batchId)));
-                }
-
-                String general = request.getFilters().get("generalSearch");
-                if (StringUtils.hasText(general)) {
-                    predicates.add(cb.like(root.get("alertCode"), "%" + general + "%"));
-                }
-
-                String[] dateRange = request.getFilters().get("dateRange") != null
-                        ? request.getFilters().get("dateRange").split(",") : null;
-
-                if (dateRange != null && dateRange.length == 2) {
-                    try {
-                        OffsetDateTime start = OffsetDateTime.parse(dateRange[0]);
-                        OffsetDateTime end = OffsetDateTime.parse(dateRange[1]);
-                        predicates.add(cb.between(root.get("alertTime"), start.toLocalDateTime(), end.toLocalDateTime()));
-                    } catch (DateTimeParseException e) {
-                        throw new IllegalArgumentException("Invalid date format for UTC ISO string", e);
-                    }
-                }
-            }
-
-            return cb.and(predicates.toArray(new Predicate[0]));
-        };
+        Specification<AlertRecord> spec = buildFilterSpecification(request);
 
         Page<AlertRecord> entityPage = alertRecordRepository.findAll(spec, pageable);
         List<AlertRecord> alertList = entityPage.getContent();
@@ -698,6 +717,67 @@ public class AlertRecordServiceImpl implements AlertRecordService {
         }).toList();
 
         return new PageImpl<>(dtos, pageable, entityPage.getTotalElements());
+    }
+
+    private Specification<AlertRecord> buildFilterSpecification(AlertRecordFilterRequest request) {
+        return (root, query, cb) -> {
+            if (query != null) {
+                query.distinct(true);
+            }
+            List<Predicate> predicates = new ArrayList<>();
+            if (request.getStatus() != null) {
+                predicates.add(cb.equal(root.get("status"), request.getStatus()));
+            }
+
+            if (request.getFilters() != null) {
+                String statusId = request.getFilters().get("alertStatusId");
+                if (StringUtils.hasText(statusId)) {
+                    predicates.add(cb.equal(root.get("alertStatus"), Integer.valueOf(statusId)));
+                }
+
+                String riskLevelId = request.getFilters().get("riskLevelId");
+                if (StringUtils.hasText(riskLevelId)) {
+                    predicates.add(cb.equal(root.get("riskLevelId"), Integer.valueOf(riskLevelId)));
+                }
+
+                String productId = request.getFilters().get("suggestedProductId");
+                if (StringUtils.hasText(productId)) {
+                    Join<AlertRecord, AlertProduct> productJoin = root.join("alertProducts", JoinType.LEFT);
+                    predicates.add(cb.equal(productJoin.get("productId"), Long.valueOf(productId)));
+                }
+
+                String batchId = request.getFilters().get("suggestedBatchId");
+                if (StringUtils.hasText(batchId)) {
+                    Join<AlertRecord, AlertBatch> batchJoin = root.join("alertBatches", JoinType.LEFT);
+                    predicates.add(cb.equal(batchJoin.get("batchId"), Long.valueOf(batchId)));
+                }
+
+                String formTemplateId = request.getFilters().get("formTemplateId");
+                if (StringUtils.hasText(formTemplateId)) {
+                    predicates.add(cb.equal(root.get("qcFormTemplateId"), Long.valueOf(formTemplateId)));
+                }
+
+                String general = request.getFilters().get("generalSearch");
+                if (StringUtils.hasText(general)) {
+                    predicates.add(cb.like(root.get("alertCode"), "%" + general + "%"));
+                }
+
+                String[] dateRange = request.getFilters().get("dateRange") != null
+                        ? request.getFilters().get("dateRange").split(",") : null;
+
+                if (dateRange != null && dateRange.length == 2) {
+                    try {
+                        OffsetDateTime start = OffsetDateTime.parse(dateRange[0]);
+                        OffsetDateTime end = OffsetDateTime.parse(dateRange[1]);
+                        predicates.add(cb.between(root.get("alertTime"), start.toLocalDateTime(), end.toLocalDateTime()));
+                    } catch (DateTimeParseException e) {
+                        throw new IllegalArgumentException("Invalid date format for UTC ISO string", e);
+                    }
+                }
+            }
+
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
     }
 
 

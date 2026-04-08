@@ -113,6 +113,17 @@ public class AlertRecordController {
         }
     }
 
+    @PostMapping("/summary/filter")
+    public ResponseEntity<?> getFilteredAlertSummary(@RequestBody AlertRecordFilterRequest request) {
+        try {
+            AlertSummaryDTO summary = alertRecordService.getAlertSummary(request);
+            return ResponseEntity.ok(summary);
+        } catch (Exception e) {
+            log.error("Failed to get filtered alert summary", e);
+            return ResponseEntity.status(500).body("Error fetching filtered summary: " + e.getMessage());
+        }
+    }
+
     /**
      * Filters alert records based on various criteria.
      *

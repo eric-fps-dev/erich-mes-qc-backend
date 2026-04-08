@@ -1,5 +1,6 @@
 package com.fps.svmes.dto.dtos.user;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fps.svmes.dto.dtos.CommonDTO;
@@ -31,7 +32,7 @@ public class UserDTO extends CommonDTO {
     @JsonProperty("username")
     private String username;
 
-    @JsonProperty("password")
+    @JsonIgnore
     private String password;
 
     @JsonProperty("email")

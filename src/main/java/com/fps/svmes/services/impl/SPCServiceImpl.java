@@ -84,11 +84,20 @@ public class SPCServiceImpl implements SPCService {
         if (controlLimits.isPresent()) {
             // TODO: refactor once the limit structures are updated
             List<String> validLimits = controlLimits.get().getControlLimits().entrySet().stream()
-                    .filter(e ->
-                            e.getValue().getLowerControlLimit() != null
-                                    && e.getValue().getUpperControlLimit() != null
-                                    && (e.getValue().getUpperControlLimit() != 99999 && e.getValue().getLowerControlLimit() != 0)
-                    )
+                    .filter(e -> {
+                        Double lower = e.getValue().getLowerControlLimit();
+                        Double upper = e.getValue().getUpperControlLimit();
+
+                        if (lower == null || upper == null) {
+                            return false;
+                        }
+
+                        // Only exclude the untouched default pair (0, 99999).
+                        // Allow valid one-sided business limits such as:
+                        // - lower == 0 with a real upper limit
+                        // - upper == 99999 with a real lower limit
+                        return !(Double.compare(lower, 0.0) == 0 && Double.compare(upper, 99999.0) == 0);
+                    })
                     .map(Map.Entry::getKey)
                     .toList();
             if (request.getFields() != null && !request.getFields().isEmpty()) {
