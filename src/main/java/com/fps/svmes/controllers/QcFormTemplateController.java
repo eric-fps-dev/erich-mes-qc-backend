@@ -149,7 +149,7 @@ public class QcFormTemplateController {
             editLogRepository.save(creationLog);
 
             logger.info("Template, nodes, and collection created successfully for multiple parent folders!");
-            return ResponseResult.success(null);
+            return ResponseResult.success(template.getId());
         } catch (Exception e) {
             logger.error("Error creating template, nodes, or collection", e);
             return ResponseResult.fail("Failed to create template with nodes and collection", e);
