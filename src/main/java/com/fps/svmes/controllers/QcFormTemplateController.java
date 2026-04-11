@@ -12,6 +12,8 @@ import com.fps.svmes.services.FormNodeService;
 import com.fps.svmes.services.MongoService;
 import com.fps.svmes.services.QcFormTemplateService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -43,6 +45,10 @@ public class QcFormTemplateController {
 
     @GetMapping
     @Operation(summary = "Get all active QC form templates", description = "Returns a list of all active QC form templates.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Active templates returned successfully"),
+            @ApiResponse(responseCode = "500", description = "Unexpected error retrieving active templates")
+    })
     public ResponseResult<List<QcFormTemplateDTO>> getAllActiveTemplates() {
         try {
             List<QcFormTemplateDTO> templates = service.getAllActiveTemplates();
@@ -56,6 +62,10 @@ public class QcFormTemplateController {
 
     @GetMapping("/{id}")
     @Operation(summary = "Get a QC form template by ID", description = "Fetches the QC form template by its ID.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Template returned successfully"),
+            @ApiResponse(responseCode = "500", description = "Unexpected error retrieving template")
+    })
     public ResponseResult<QcFormTemplateDTO> getTemplateById(@PathVariable Long id) {
         try {
             QcFormTemplateDTO template = service.getTemplateById(id);
@@ -68,7 +78,11 @@ public class QcFormTemplateController {
     }
 
     @PostMapping
-    @Operation(summary = "Create a new QC form template", description = "Creates a new QC form template.")
+    @Operation(summary = "Create QC form template", description = "Creates a QC form template record without creating form tree nodes or Mongo collections.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Template created successfully"),
+            @ApiResponse(responseCode = "500", description = "Unexpected error creating template")
+    })
     public ResponseResult<QcFormTemplateDTO> createTemplate(@RequestBody QcFormTemplateDTO dto) {
         try {
             QcFormTemplateDTO createdTemplate = service.createTemplate(dto);
@@ -81,7 +95,11 @@ public class QcFormTemplateController {
     }
 
     @PutMapping("/{id}")
-    @Operation(summary = "Update a QC form template", description = "Updates an existing QC form template.")
+    @Operation(summary = "Update QC form template", description = "Updates an existing QC form template record without synchronizing form tree nodes.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Template updated successfully"),
+            @ApiResponse(responseCode = "500", description = "Unexpected error updating template")
+    })
     public ResponseResult<QcFormTemplateDTO> updateTemplate(@PathVariable Long id, @RequestBody QcFormTemplateDTO dto) {
         try {
             QcFormTemplateDTO updatedTemplate = service.updateTemplate(id, dto);
@@ -95,6 +113,10 @@ public class QcFormTemplateController {
 
     @DeleteMapping("/{id}")
     @Operation(summary = "Delete a QC form template", description = "Marks a QC form template as inactive by setting its status to 0.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Template soft-deleted successfully"),
+            @ApiResponse(responseCode = "500", description = "Unexpected error deleting template")
+    })
     public ResponseResult<Void> deleteTemplate(@PathVariable Long id) {
         try {
             service.deleteTemplate(id);
@@ -108,7 +130,12 @@ public class QcFormTemplateController {
 
     @PostMapping("/create-with-nodes")
     @Operation(summary = "Create a QC form template with nodes and collections",
-            description = "Creates a QC form template, adds nodes under multiple selected folders, and initializes MongoDB collections.")
+            description = "Creates a QC form template, adds document nodes under all selected parent folders, initializes the dynamic Mongo collection, stores key-label mappings, creates control limit settings, and writes a creation audit log.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Template, nodes, collection, mappings, and audit log created successfully"),
+            @ApiResponse(responseCode = "400", description = "A selected parent folder could not receive the template node"),
+            @ApiResponse(responseCode = "500", description = "Unexpected error creating template, nodes, or collection")
+    })
     public ResponseResult<Map<String, Object>> createTemplateWithNodes(@RequestBody TemplateFormRequest request) {
         try {
             // Step 1: Create Template
@@ -159,7 +186,12 @@ public class QcFormTemplateController {
 
     @PutMapping("/{id}/full-update")
     @Operation(summary = "Full update with node sync and audit log",
-            description = "Updates a QC form template, syncs FormNode labels, and writes an audit log entry.")
+            description = "Updates a QC form template, synchronizes matching FormNode labels, and writes an edit audit log entry.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Template updated, nodes synchronized, and audit log written"),
+            @ApiResponse(responseCode = "400", description = "Invalid template update request"),
+            @ApiResponse(responseCode = "500", description = "Unexpected error updating template")
+    })
     public ResponseEntity<?> fullUpdateTemplate(
             @PathVariable Long id,
             @RequestBody QcFormTemplateDTO dto) {
@@ -177,6 +209,10 @@ public class QcFormTemplateController {
     @GetMapping("/{id}/edit-log")
     @Operation(summary = "Get edit log for a template",
             description = "Returns the audit log entries for a QC form template.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Template edit logs returned successfully"),
+            @ApiResponse(responseCode = "500", description = "Unexpected error fetching edit log")
+    })
     public ResponseEntity<?> getEditLog(@PathVariable Long id) {
         try {
             List<QcFormTemplateEditLogDTO> logs = service.getEditLog(id);
@@ -188,7 +224,14 @@ public class QcFormTemplateController {
     }
 
     @GetMapping("/{id}/fields")
-    @Operation(summary = "Get all fields for a template including soft-deleted ones")
+    @Operation(
+            summary = "Get template fields",
+            description = "Returns all fields for a QC form template, including soft-deleted fields, for field mapping and audit views."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Template fields returned successfully"),
+            @ApiResponse(responseCode = "500", description = "Unexpected error fetching template fields")
+    })
     public ResponseEntity<?> getTemplateFields(@PathVariable Long id) {
         try {
             return ResponseEntity.ok(ResponseResult.success(service.getTemplateFields(id)));

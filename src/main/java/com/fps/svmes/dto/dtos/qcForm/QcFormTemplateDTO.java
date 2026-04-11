@@ -22,6 +22,9 @@ public class QcFormTemplateDTO extends CommonDTO {
     @JsonProperty("approval_type")
     private String approvalType;
 
+    @JsonProperty("approval_template_id")
+    private String approvalTemplateId;
+
     @JsonProperty("has_edit_history")
     private Boolean hasEditHistory;
 }

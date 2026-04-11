@@ -100,8 +100,12 @@ public class QcApprovalAssignmentServiceImpl implements QcApprovalAssignmentServ
                 .map(entity -> modelMapper.map(entity, QcApprovalAssignmentDTO.class));
     }
 
-    @Override
-    public List<Document> getVersionHistory(String submissionId, String collectionName) {
+    /*
+     * Legacy version history moved to QcFormDataServiceImpl.
+     * Kept out of the QcApprovalAssignmentService API so new callers do not
+     * depend on the compatibility approval assignment service.
+     *
+    public List<Document> legacyVersionHistoryMoved(String submissionId, String collectionName) {
         // Step 1: Connect to the collection
         MongoDatabase database = mongoClient.getDatabase(mongoDatabaseName);
         MongoCollection<Document> collection = database.getCollection(collectionName);
@@ -140,6 +144,7 @@ public class QcApprovalAssignmentServiceImpl implements QcApprovalAssignmentServ
 
     }
 
+    */
     @Transactional
     @Override
     public void approveAction(String submissionId, String collectionName, Integer approverId, String comment, boolean suggestRetest, String eSignatureBase64) {

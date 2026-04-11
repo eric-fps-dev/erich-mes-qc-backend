@@ -27,4 +27,8 @@ public class QcFormTemplate extends Common {
     @JsonProperty("approval_type")
     private String approvalType;
 
+    @Column(name = "approval_template_id")
+    @JsonProperty("approval_template_id")
+    private String approvalTemplateId;
+
 }

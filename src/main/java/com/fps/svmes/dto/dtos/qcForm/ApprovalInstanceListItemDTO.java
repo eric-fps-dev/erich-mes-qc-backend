@@ -1,0 +1,29 @@
+package com.fps.svmes.dto.dtos.qcForm;
+
+import lombok.Data;
+
+import java.util.Date;
+import java.util.List;
+import java.util.Map;
+
+@Data
+public class ApprovalInstanceListItemDTO {
+    private String submissionId;
+    private String collectionName;
+    private Long formTemplateId;
+    private String formSubmissionState;
+    private String approvalInstanceId;
+    private String approvalTemplateId;
+    private Integer currentStepSequence;
+    private List<ApprovalInstanceListStepDTO> approvalSteps;
+    private Integer approvalInstanceVersion;
+    private Integer formSubmissionVersion;
+    private Date createdAt;
+    private Object createdBy;
+    private Object relatedInspectorIds;
+    private Object relatedProductIds;
+    private Object relatedBatchIds;
+    private Object relatedTeamId;
+    private Object relatedShiftId;
+    private Map<String, Object> formData;
+}
