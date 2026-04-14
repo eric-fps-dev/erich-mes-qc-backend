@@ -23,6 +23,7 @@ import org.springframework.web.bind.annotation.*;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @RestController
@@ -108,7 +109,7 @@ public class QcFormTemplateController {
     @PostMapping("/create-with-nodes")
     @Operation(summary = "Create a QC form template with nodes and collections",
             description = "Creates a QC form template, adds nodes under multiple selected folders, and initializes MongoDB collections.")
-    public ResponseResult<Void> createTemplateWithNodes(@RequestBody TemplateFormRequest request) {
+    public ResponseResult<Map<String, Object>> createTemplateWithNodes(@RequestBody TemplateFormRequest request) {
         try {
             // Step 1: Create Template
             QcFormTemplateDTO template = service.createTemplate(request.getForm());
@@ -149,7 +150,7 @@ public class QcFormTemplateController {
             editLogRepository.save(creationLog);
 
             logger.info("Template, nodes, and collection created successfully for multiple parent folders!");
-            return ResponseResult.success(null);
+            return ResponseResult.success(Map.of("id", template.getId()));
         } catch (Exception e) {
             logger.error("Error creating template, nodes, or collection", e);
             return ResponseResult.fail("Failed to create template with nodes and collection", e);
