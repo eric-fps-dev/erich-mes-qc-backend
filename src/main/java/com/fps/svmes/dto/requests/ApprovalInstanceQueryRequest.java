@@ -10,6 +10,7 @@ public class ApprovalInstanceQueryRequest {
     private String sortField = "created_at";
     private Sort.Direction sortDirection = Sort.Direction.DESC;
     private boolean includeFormData;
+    private String submissionId;
     private Long submitterUserId;
     private Long inspectorUserId;
     private Long suggestedProductId;
@@ -18,6 +19,8 @@ public class ApprovalInstanceQueryRequest {
     private Long shiftId;
     private Long formTemplateId;
     private String approvalTemplateId;
+    private String currentRequiredUserId;
+    private String currentRequiredRoleId;
     private String createdAtStart;
     private String createdAtEnd;
     private String formSubmissionState;

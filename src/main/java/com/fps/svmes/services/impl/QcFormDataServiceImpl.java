@@ -294,9 +294,16 @@ public class QcFormDataServiceImpl implements QcFormDataService {
                 : Map.of();
         long formFetchMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - formFetchStartedAt);
 
+        Map<Long, String> formTemplateNames = formTemplateNamesById(instances);
+
         long dtoStartedAt = System.nanoTime();
         List<ApprovalInstanceListItemDTO> content = instances.stream()
-                .map(instance -> toApprovalInstanceListItemDto(instance, latestForms.get(instance.getFormSubmissionId()), safeRequest.isIncludeFormData()))
+                .map(instance -> toApprovalInstanceListItemDto(
+                        instance,
+                        latestForms.get(instance.getFormSubmissionId()),
+                        safeRequest.isIncludeFormData(),
+                        formTemplateNames
+                ))
                 .toList();
         long dtoMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - dtoStartedAt);
 
@@ -321,6 +328,9 @@ public class QcFormDataServiceImpl implements QcFormDataService {
         List<Criteria> criteria = new ArrayList<>();
         criteria.add(Criteria.where("status").is(1));
         criteria.add(Criteria.where("filterSnapshot.formSubmissionState").ne(FormSubmissionState.VOID.dbValue()));
+        if (request.getSubmissionId() != null && !request.getSubmissionId().isBlank()) {
+            criteria.add(Criteria.where("formSubmissionId").is(request.getSubmissionId()));
+        }
         if (request.getApprovalTemplateId() != null && !request.getApprovalTemplateId().isBlank()) {
             criteria.add(Criteria.where("approvalTemplateId").is(request.getApprovalTemplateId()));
         }
@@ -333,6 +343,7 @@ public class QcFormDataServiceImpl implements QcFormDataService {
         if (request.getSubmitterUserId() != null) {
             criteria.add(Criteria.where("filterSnapshot.createdBy").is(request.getSubmitterUserId()));
         }
+        addCurrentRequiredApproverCriteria(criteria, request);
         addLongCriteria(criteria, "filterSnapshot.relatedInspectorIds", request.getInspectorUserId());
         addLongCriteria(criteria, "filterSnapshot.relatedProductIds", request.getSuggestedProductId());
         addLongCriteria(criteria, "filterSnapshot.relatedBatchIds", request.getSuggestedBatchId());
@@ -354,6 +365,34 @@ public class QcFormDataServiceImpl implements QcFormDataService {
             return criteria.get(0);
         }
         return new Criteria().andOperator(criteria.toArray(new Criteria[0]));
+    }
+
+    private void addCurrentRequiredApproverCriteria(List<Criteria> criteria, ApprovalInstanceQueryRequest request) {
+        boolean hasRequiredUser = request.getCurrentRequiredUserId() != null && !request.getCurrentRequiredUserId().isBlank();
+        boolean hasRequiredRole = request.getCurrentRequiredRoleId() != null && !request.getCurrentRequiredRoleId().isBlank();
+        if (!hasRequiredUser && !hasRequiredRole) {
+            return;
+        }
+
+        List<Criteria> approverCriteria = new ArrayList<>();
+        if (hasRequiredUser) {
+            approverCriteria.add(Criteria.where("approvalSteps").elemMatch(
+                    Criteria.where("stepState").is("IN_PROGRESS")
+                            .and("requiredUserId").is(request.getCurrentRequiredUserId())
+            ));
+        }
+        if (hasRequiredRole) {
+            approverCriteria.add(Criteria.where("approvalSteps").elemMatch(
+                    Criteria.where("stepState").is("IN_PROGRESS")
+                            .and("requiredRoleId").is(request.getCurrentRequiredRoleId())
+            ));
+        }
+
+        if (approverCriteria.size() == 1) {
+            criteria.add(approverCriteria.get(0));
+        } else {
+            criteria.add(new Criteria().orOperator(approverCriteria.toArray(new Criteria[0])));
+        }
     }
 
     private Sort approvalInstanceSort(ApprovalInstanceQueryRequest request) {
@@ -418,12 +457,15 @@ public class QcFormDataServiceImpl implements QcFormDataService {
                 .include("status");
     }
 
-    private ApprovalInstanceListItemDTO toApprovalInstanceListItemDto(ApprovalInstance instance, Document latestForm, boolean includeFormData) {
+    private ApprovalInstanceListItemDTO toApprovalInstanceListItemDto(ApprovalInstance instance, Document latestForm,
+                                                                      boolean includeFormData, Map<Long, String> formTemplateNames) {
         ApprovalInstanceFilterSnapshot snapshot = instance.getFilterSnapshot();
+        Long formTemplateId = snapshot == null ? asLong(instance.getFormTemplateId()) : snapshot.getFormTemplateId();
         ApprovalInstanceListItemDTO dto = new ApprovalInstanceListItemDTO();
         dto.setSubmissionId(instance.getFormSubmissionId());
         dto.setCollectionName(instance.getFormSubmissionCollectionName());
-        dto.setFormTemplateId(snapshot == null ? asLong(instance.getFormTemplateId()) : snapshot.getFormTemplateId());
+        dto.setFormTemplateId(formTemplateId);
+        dto.setFormTemplateName(formTemplateId == null ? null : formTemplateNames.get(formTemplateId));
         dto.setFormSubmissionState(snapshot == null ? null : snapshot.getFormSubmissionState());
         dto.setApprovalInstanceId(instance.getId());
         dto.setApprovalTemplateId(instance.getApprovalTemplateId());
@@ -432,7 +474,9 @@ public class QcFormDataServiceImpl implements QcFormDataService {
         dto.setApprovalInstanceVersion(nullToOne(instance.getVersionNumber()));
         dto.setFormSubmissionVersion(snapshot == null ? 1 : nullToOne(snapshot.getFormSubmissionVersion()));
         dto.setCreatedAt(snapshot == null ? null : snapshot.getCreatedAt());
+        dto.setUpdatedAt(instance.getUpdatedAt());
         dto.setCreatedBy(snapshot == null ? null : snapshot.getCreatedBy());
+        dto.setUpdatedBy(instance.getUpdatedBy());
         dto.setRelatedInspectorIds(snapshot == null ? null : snapshot.getRelatedInspectorIds());
         dto.setRelatedProductIds(snapshot == null ? null : snapshot.getRelatedProductIds());
         dto.setRelatedBatchIds(snapshot == null ? null : snapshot.getRelatedBatchIds());
@@ -440,6 +484,29 @@ public class QcFormDataServiceImpl implements QcFormDataService {
         dto.setRelatedShiftId(snapshot == null ? null : snapshot.getRelatedShiftId());
         dto.setFormData(includeFormData && latestForm != null ? new HashMap<>(latestForm) : null);
         return dto;
+    }
+
+    private Map<Long, String> formTemplateNamesById(List<ApprovalInstance> instances) {
+        if (instances == null || instances.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, String> namesById = new HashMap<>();
+        for (ApprovalInstance instance : instances) {
+            Long formTemplateId = instance.getFilterSnapshot() == null
+                    ? asLong(instance.getFormTemplateId())
+                    : instance.getFilterSnapshot().getFormTemplateId();
+            if (formTemplateId == null || namesById.containsKey(formTemplateId)) {
+                continue;
+            }
+            try {
+                QcFormTemplateDTO template = qcFormTemplateService.getTemplateById(formTemplateId);
+                namesById.put(formTemplateId, template == null ? null : template.getName());
+            } catch (RuntimeException e) {
+                log.warn("Unable to resolve form template name for id={}", formTemplateId, e);
+                namesById.put(formTemplateId, null);
+            }
+        }
+        return namesById;
     }
 
     private List<ApprovalInstanceListStepDTO> toApprovalInstanceListSteps(ApprovalInstance instance) {

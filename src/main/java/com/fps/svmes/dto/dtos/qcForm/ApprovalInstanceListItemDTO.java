@@ -2,6 +2,7 @@ package com.fps.svmes.dto.dtos.qcForm;
 
 import lombok.Data;
 
+import java.time.Instant;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
@@ -11,6 +12,7 @@ public class ApprovalInstanceListItemDTO {
     private String submissionId;
     private String collectionName;
     private Long formTemplateId;
+    private String formTemplateName;
     private String formSubmissionState;
     private String approvalInstanceId;
     private String approvalTemplateId;
@@ -19,7 +21,9 @@ public class ApprovalInstanceListItemDTO {
     private Integer approvalInstanceVersion;
     private Integer formSubmissionVersion;
     private Date createdAt;
+    private Instant updatedAt;
     private Object createdBy;
+    private Long updatedBy;
     private Object relatedInspectorIds;
     private Object relatedProductIds;
     private Object relatedBatchIds;

@@ -143,6 +143,7 @@ public class QcFormDataController {
             @RequestParam(defaultValue = "created_at") String sortField,
             @RequestParam(defaultValue = "DESC") Sort.Direction sortDirection,
             @RequestParam(name = "include_form_data", defaultValue = "false") boolean includeFormData,
+            @RequestParam(name = "submission_id", required = false) String submissionId,
             @RequestParam(name = "submitter_user_id", required = false) Long submitterUserId,
             @RequestParam(name = "inspector_user_id", required = false) Long inspectorUserId,
             @RequestParam(name = "suggested_product_id", required = false) Long suggestedProductId,
@@ -151,6 +152,8 @@ public class QcFormDataController {
             @RequestParam(name = "shift_id", required = false) Long shiftId,
             @RequestParam(name = "form_template_id", required = false) Long formTemplateId,
             @RequestParam(name = "approval_template_id", required = false) String approvalTemplateId,
+            @RequestParam(name = "current_required_user_id", required = false) String currentRequiredUserId,
+            @RequestParam(name = "current_required_role_id", required = false) String currentRequiredRoleId,
             @RequestParam(name = "created_at_start", required = false) String createdAtStart,
             @RequestParam(name = "created_at_end", required = false) String createdAtEnd,
             @RequestParam(name = "form_submission_state", required = false) String formSubmissionState
@@ -162,6 +165,7 @@ public class QcFormDataController {
                     sortField,
                     sortDirection,
                     includeFormData,
+                    submissionId,
                     submitterUserId,
                     inspectorUserId,
                     suggestedProductId,
@@ -170,6 +174,8 @@ public class QcFormDataController {
                     shiftId,
                     formTemplateId,
                     approvalTemplateId,
+                    currentRequiredUserId,
+                    currentRequiredRoleId,
                     createdAtStart,
                     createdAtEnd,
                     formSubmissionState
@@ -202,6 +208,7 @@ public class QcFormDataController {
             @RequestParam(defaultValue = "created_at") String sortField,
             @RequestParam(defaultValue = "DESC") Sort.Direction sortDirection,
             @RequestParam(name = "include_form_data", defaultValue = "false") boolean includeFormData,
+            @RequestParam(name = "submission_id", required = false) String submissionId,
             @RequestParam(name = "submitter_user_id", required = false) Long submitterUserId,
             @RequestParam(name = "inspector_user_id", required = false) Long inspectorUserId,
             @RequestParam(name = "suggested_product_id", required = false) Long suggestedProductId,
@@ -210,6 +217,8 @@ public class QcFormDataController {
             @RequestParam(name = "shift_id", required = false) Long shiftId,
             @RequestParam(name = "form_template_id", required = false) Long formTemplateId,
             @RequestParam(name = "approval_template_id", required = false) String approvalTemplateId,
+            @RequestParam(name = "current_required_user_id", required = false) String currentRequiredUserId,
+            @RequestParam(name = "current_required_role_id", required = false) String currentRequiredRoleId,
             @RequestParam(name = "created_at_start", required = false) String createdAtStart,
             @RequestParam(name = "created_at_end", required = false) String createdAtEnd,
             @RequestParam(name = "form_submission_state", required = false) String formSubmissionState
@@ -221,6 +230,7 @@ public class QcFormDataController {
                     sortField,
                     sortDirection,
                     includeFormData,
+                    submissionId,
                     submitterUserId,
                     inspectorUserId,
                     suggestedProductId,
@@ -229,6 +239,8 @@ public class QcFormDataController {
                     shiftId,
                     formTemplateId,
                     approvalTemplateId,
+                    currentRequiredUserId,
+                    currentRequiredRoleId,
                     createdAtStart,
                     createdAtEnd,
                     formSubmissionState
@@ -671,7 +683,7 @@ public class QcFormDataController {
      */
     @GetMapping({"/approval-instance"})
     @Operation(
-            summary = "Get approval instance",
+            summary = "Get approval instance by form submission id and collection",
             description = "Returns the approval instance for a form submission, including voided approval instances when needed for audit history."
     )
     @ApiResponses({
@@ -735,6 +747,7 @@ public class QcFormDataController {
             String sortField,
             Sort.Direction sortDirection,
             boolean includeFormData,
+            String submissionId,
             Long submitterUserId,
             Long inspectorUserId,
             Long suggestedProductId,
@@ -743,6 +756,8 @@ public class QcFormDataController {
             Long shiftId,
             Long formTemplateId,
             String approvalTemplateId,
+            String currentRequiredUserId,
+            String currentRequiredRoleId,
             String createdAtStart,
             String createdAtEnd,
             String formSubmissionState
@@ -753,6 +768,7 @@ public class QcFormDataController {
         request.setSortField(sortField);
         request.setSortDirection(sortDirection);
         request.setIncludeFormData(includeFormData);
+        request.setSubmissionId(submissionId);
         request.setSubmitterUserId(submitterUserId);
         request.setInspectorUserId(inspectorUserId);
         request.setSuggestedProductId(suggestedProductId);
@@ -761,6 +777,8 @@ public class QcFormDataController {
         request.setShiftId(shiftId);
         request.setFormTemplateId(formTemplateId);
         request.setApprovalTemplateId(approvalTemplateId);
+        request.setCurrentRequiredUserId(currentRequiredUserId);
+        request.setCurrentRequiredRoleId(currentRequiredRoleId);
         request.setCreatedAtStart(createdAtStart);
         request.setCreatedAtEnd(createdAtEnd);
         request.setFormSubmissionState(formSubmissionState);

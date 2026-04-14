@@ -37,15 +37,9 @@ public class FormSubmissionStateUpdaterImpl implements FormSubmissionStateUpdate
 
     @Override
     public Document getLatestFormSubmission(String submissionId, String collectionName) {
-        Document initial = findSubmission(submissionId, collectionName);
-        String versionGroupId = initial.getString("version_group_id");
-        if (versionGroupId == null || versionGroupId.isBlank()) {
-            return initial;
-        }
-        Query query = new Query(Criteria.where("version_group_id").is(versionGroupId));
-        query.with(Sort.by(Sort.Direction.DESC, "version"));
-        Document latest = mongoTemplate.findOne(query, Document.class, collectionName);
-        return latest != null ? latest : initial;
+        // Approval-instance actions should validate against the exact submission currently
+        // referenced by the approval instance, not the newest sibling in the version group.
+        return findSubmission(submissionId, collectionName);
     }
 
     @Override

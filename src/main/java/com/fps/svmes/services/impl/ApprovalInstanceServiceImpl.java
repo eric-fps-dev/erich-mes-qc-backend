@@ -490,6 +490,7 @@ public class ApprovalInstanceServiceImpl implements ApprovalInstanceService {
         logEntry.setAction(action);
         logEntry.setStepSequence(stepSequence);
         logEntry.setComments(request.getComment());
+        logEntry.setESignature(request.getESignature());
         logEntry.setActorUserId(actor.actorUserId());
         logEntry.setActorUserName(actor.actorUserName() != null ? actor.actorUserName() : actorUserName(actor.actorUserId()));
         logEntry.setActorRoleId(actorRoleIdForLog(instance, actor, stepSequence));

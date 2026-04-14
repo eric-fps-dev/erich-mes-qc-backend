@@ -20,6 +20,9 @@ public class ApprovalActionLog {
     @Field("comments")
     private String comments;
 
+    @Field("eSignature")
+    private String eSignature;
+
     @Field("actorUserId")
     private String actorUserId;
 
