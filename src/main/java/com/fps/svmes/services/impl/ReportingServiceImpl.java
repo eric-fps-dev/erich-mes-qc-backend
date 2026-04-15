@@ -585,29 +585,66 @@ public class ReportingServiceImpl implements ReportingService {
         // Identify relevant collections
         List<String> collectionNames = getRelevantCollections(database, formTemplateId, startDateTime, endDateTime);
 
+        Instant startInstant = convertStringToInstant(startDateTime);
+        Instant endInstant = convertStringToInstant(endDateTime);
+
         Map<String, Document> latestVersionMap = new HashMap<>();
+        Map<String, Document> originalVersionMap = new HashMap<>();
+        Map<String, Document> standaloneRecordMap = new HashMap<>();
         Set<Integer> userIds = new HashSet<>();
 
         for (String collectionName : collectionNames) {
             MongoCollection<Document> collection = database.getCollection(collectionName);
 
-            List<Document> allDocs = queryRecords(collection, startDateTime, endDateTime, 0, Integer.MAX_VALUE);
+            List<Document> allDocs = collection.find().into(new ArrayList<>());
             for (Document doc : allDocs) {
                 String groupId = doc.getString("version_group_id");
                 Integer version = doc.getInteger("version", 0);
+                Date createdAt = doc.getDate("created_at");
 
                 if (doc.containsKey("created_by") && doc.get("created_by") instanceof Number) {
                     userIds.add(((Number) doc.get("created_by")).intValue());
                 }
 
                 if (groupId != null) {
-                    Document existing = latestVersionMap.get(groupId);
-                    if (existing == null || version > existing.getInteger("version", 0)) {
+                    Document existingLatest = latestVersionMap.get(groupId);
+                    if (existingLatest == null
+                            || version > existingLatest.getInteger("version", 0)
+                            || (Objects.equals(version, existingLatest.getInteger("version", 0))
+                            && createdAt != null
+                            && (existingLatest.getDate("created_at") == null || createdAt.after(existingLatest.getDate("created_at"))))) {
                         latestVersionMap.put(groupId, doc);
                     }
+
+                    Document existingOriginal = originalVersionMap.get(groupId);
+                    if (existingOriginal == null
+                            || version < existingOriginal.getInteger("version", 0)
+                            || (Objects.equals(version, existingOriginal.getInteger("version", 0))
+                            && createdAt != null
+                            && (existingOriginal.getDate("created_at") == null || createdAt.before(existingOriginal.getDate("created_at"))))) {
+                        originalVersionMap.put(groupId, doc);
+                    }
                 } else {
-                    latestVersionMap.put(doc.getObjectId("_id").toString(), doc);
+                    if (createdAt != null
+                            && !createdAt.toInstant().isBefore(startInstant)
+                            && !createdAt.toInstant().isAfter(endInstant)) {
+                        standaloneRecordMap.put(doc.getObjectId("_id").toString(), doc);
+                    }
                 }
+            }
+        }
+
+        Map<String, Document> includedRecords = new HashMap<>(standaloneRecordMap);
+        for (Map.Entry<String, Document> entry : latestVersionMap.entrySet()) {
+            String groupId = entry.getKey();
+            Document latestDoc = entry.getValue();
+            Document originalDoc = originalVersionMap.get(groupId);
+            Date originalCreatedAt = originalDoc != null ? originalDoc.getDate("created_at") : null;
+
+            if (originalCreatedAt != null
+                    && !originalCreatedAt.toInstant().isBefore(startInstant)
+                    && !originalCreatedAt.toInstant().isAfter(endInstant)) {
+                includedRecords.put(groupId, latestDoc);
             }
         }
 
@@ -622,7 +659,7 @@ public class ReportingServiceImpl implements ReportingService {
                         ));
 
         // Stream Pipeline: Format -> Filter -> Sort
-        Stream<Document> stream = latestVersionMap.values().parallelStream()
+        Stream<Document> stream = includedRecords.values().parallelStream()
                 .map(doc -> formattedResult(doc, optionItemsKeyValueMap, keyValueMap, userNameMap));
 
         // 2. Filter (search) on visible field values only (excluding metadata fields)
@@ -697,32 +734,68 @@ public class ReportingServiceImpl implements ReportingService {
         List<String> collectionNames = getRelevantCollections(database, formTemplateId,
                 startDateTime, endDateTime);
 
+        Instant startInstant = convertStringToInstant(startDateTime);
+        Instant endInstant = convertStringToInstant(endDateTime);
+
         /** ---------- 1. 取最新版本 ---------- */
         Map<String, Document> latestVersionMap = new HashMap<>();
+        Map<String, Document> originalVersionMap = new HashMap<>();
+        Map<String, Document> standaloneRecordMap = new HashMap<>();
         Set<Integer> userIds = new HashSet<>();
 
         for (String colName : collectionNames) {
             MongoCollection<Document> col = database.getCollection(colName);
 
-            // **0, Integer.MAX_VALUE** ：一次性取完
-            List<Document> docs = queryRecords(col, startDateTime, endDateTime, 0, Integer.MAX_VALUE);
+            List<Document> docs = col.find().into(new ArrayList<>());
 
             for (Document d : docs) {
                 String gid      = d.getString("version_group_id");
                 Integer version = d.getInteger("version", 0);
+                Date createdAt = d.getDate("created_at");
 
                 if (d.containsKey("created_by") && d.get("created_by") instanceof Number) {
                     userIds.add(((Number) d.get("created_by")).intValue());
                 }
 
                 if (gid != null) {
-                    Document existing = latestVersionMap.get(gid);
-                    if (existing == null || version > existing.getInteger("version", 0)) {
+                    Document existingLatest = latestVersionMap.get(gid);
+                    if (existingLatest == null
+                            || version > existingLatest.getInteger("version", 0)
+                            || (Objects.equals(version, existingLatest.getInteger("version", 0))
+                            && createdAt != null
+                            && (existingLatest.getDate("created_at") == null || createdAt.after(existingLatest.getDate("created_at"))))) {
                         latestVersionMap.put(gid, d);
                     }
+
+                    Document existingOriginal = originalVersionMap.get(gid);
+                    if (existingOriginal == null
+                            || version < existingOriginal.getInteger("version", 0)
+                            || (Objects.equals(version, existingOriginal.getInteger("version", 0))
+                            && createdAt != null
+                            && (existingOriginal.getDate("created_at") == null || createdAt.before(existingOriginal.getDate("created_at"))))) {
+                        originalVersionMap.put(gid, d);
+                    }
                 } else {
-                    latestVersionMap.put(d.getObjectId("_id").toString(), d);
+                    if (createdAt != null
+                            && !createdAt.toInstant().isBefore(startInstant)
+                            && !createdAt.toInstant().isAfter(endInstant)) {
+                        standaloneRecordMap.put(d.getObjectId("_id").toString(), d);
+                    }
                 }
+            }
+        }
+
+        Map<String, Document> includedRecords = new HashMap<>(standaloneRecordMap);
+        for (Map.Entry<String, Document> entry : latestVersionMap.entrySet()) {
+            String groupId = entry.getKey();
+            Document latestDoc = entry.getValue();
+            Document originalDoc = originalVersionMap.get(groupId);
+            Date originalCreatedAt = originalDoc != null ? originalDoc.getDate("created_at") : null;
+
+            if (originalCreatedAt != null
+                    && !originalCreatedAt.toInstant().isBefore(startInstant)
+                    && !originalCreatedAt.toInstant().isAfter(endInstant)) {
+                includedRecords.put(groupId, latestDoc);
             }
         }
 
@@ -737,7 +810,7 @@ public class ReportingServiceImpl implements ReportingService {
                         ));
 
         /** ---------- 2. Pipeline: Format -> Filter -> Sort ---------- */
-        Stream<Document> stream = latestVersionMap.values().parallelStream()
+        Stream<Document> stream = includedRecords.values().parallelStream()
                 .map(doc -> formattedResult(doc, optionItemsKeyValueMap, keyValueMap, userNameMap));
 
         if (search != null && !search.isEmpty()) {
