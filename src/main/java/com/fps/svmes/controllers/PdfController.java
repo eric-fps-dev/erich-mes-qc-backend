@@ -11,10 +11,7 @@ import com.itextpdf.text.pdf.BaseFont;
 import com.itextpdf.text.pdf.PdfWriter;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.*;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import org.thymeleaf.TemplateEngine;
 import org.thymeleaf.context.Context;
 import java.nio.file.Files;
@@ -93,7 +90,7 @@ public class PdfController {
             // Render Thymeleaf template
             Context context = new Context();
             context.setVariables(data);
-            String htmlContent = templateEngine.process("qc_report", context);
+            String htmlContent = templateEngine.process("qc_report_en", context);
 
             response.setContentType("application/pdf");
             response.setHeader("Content-Disposition", "attachment; filename=qc_report.pdf");
@@ -119,7 +116,10 @@ public class PdfController {
     }
 
     @PostMapping(value = "/generate", produces = MediaType.APPLICATION_PDF_VALUE)
-    public ResponseEntity<byte[]> generateReport(@RequestBody ReportRequest request) {
+    public ResponseEntity<byte[]> generateReport(
+            @RequestBody ReportRequest request,
+            @RequestParam(defaultValue = "en-US") String language
+    ) {
         try {
             // 1️⃣ Process charts and save images as temporary files
             ArrayList<Object> imagePaths = new ArrayList<>();
@@ -171,7 +171,8 @@ public class PdfController {
             context.setVariable("endDateTime", request.getEndDateTime());
             context.setVariable("charts", request.getCharts());
 
-            String htmlContent = renderHtml("qc_report", context);
+            String templateName = "zh-CN".equalsIgnoreCase(language) ? "qc_report_cn" : "qc_report_en";
+            String htmlContent = renderHtml(templateName, context);
 
             // 3️⃣ Convert HTML to PDF (pass imagePaths for cleanup)
             byte[] pdfBytes = convertHtmlToPdf(htmlContent, imagePaths);

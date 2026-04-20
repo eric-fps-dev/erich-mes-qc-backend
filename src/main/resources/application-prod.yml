@@ -18,6 +18,7 @@ spring:
   data:
     mongodb:
       uri: mongodb://admin:snow123456@10.10.60.212:27017/dev-mes-qc?authSource=admin
+      database: dev-mes-qc
 
   security:
     user:
@@ -28,6 +29,11 @@ feign:
   client:
     config:
       s3-adapter-service:
-        url: http://10.10.60.212:8083
+        url: http://s3-adapter-service:8083
         connect-timeout: 5000
         read-timeout: 5000
+
+qc:
+  snapshot:
+    api:
+      url: ${QC_SNAPSHOT_API_URL:http://localhost:8081}

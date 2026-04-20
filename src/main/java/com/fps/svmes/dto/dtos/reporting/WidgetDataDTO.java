@@ -18,4 +18,20 @@ public class WidgetDataDTO {
     private List<OptionItemDTO> optionItems;
     private List<Double> chartData; // Holds numeric data
     private List<String> xaxisData; // Holds formatted timestamps
+
+    // NEW: Time-bucketed data for categorical trends
+    private List<TimeBucketedOptionDTO> timeBucketedData;  // Each option with counts array
+    private List<String> bucketLabels;                      // ["2024-01-01", "2024-01-02", ...]
+    private String bucketType;                              // "hourly", "daily", "weekly"
+
+    private boolean deleted;
+
+    public WidgetDataDTO(String name, String label, String type, List<OptionItemDTO> optionItems, List<Double> chartData, List<String> xaxisData) {
+        this.name = name;
+        this.label = label;
+        this.type = type;
+        this.optionItems = optionItems;
+        this.chartData = chartData;
+        this.xaxisData = xaxisData;
+    }
 }

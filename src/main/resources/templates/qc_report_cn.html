@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>质量控制报告</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 11px;
+            color: #333333;
+            background: #ffffff;
+        }
+
+        /* ── 页眉 ── */
+        .header {
+            border-top: 4px solid #0085a4;
+            padding: 28px 36px 20px;
+        }
+
+        .header-label {
+            font-size: 14px;
+            font-weight: bold;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: #0085a4;
+            margin-bottom: 10px;
+        }
+
+        .header-title {
+            font-size: 20px;
+            font-weight: bold;
+            color: #111111;
+            line-height: 1.3;
+        }
+
+        .header-meta {
+            margin-top: 10px;
+            font-size: 11px;
+            color: #666666;
+        }
+
+        .header-meta strong {
+            color: #111111;
+            font-weight: bold;
+        }
+
+        .divider {
+            height: 1px;
+            background: #e5e5e5;
+            margin: 0 36px;
+        }
+
+        /* ── 正文 ── */
+        .body {
+            padding: 24px 36px 32px;
+        }
+
+        /* ── 节标签 ── */
+        .section-label {
+            font-size: 14px;
+            font-weight: bold;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            color: #0085a4;
+            margin-bottom: 14px;
+        }
+
+        /* ── 图表块 ── */
+        .chart-block {
+            margin-bottom: 32px;
+            page-break-inside: avoid;
+        }
+
+        .chart-index {
+            font-size: 13px;
+            font-weight: bold;
+            color: #0085a4;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 8px;
+        }
+
+        .chart-block img {
+            display: block;
+            width: 100%;
+            height: auto;
+            border: 1px solid #e5e5e5;
+        }
+
+        /* ── 折线图统计 ── */
+        .stats {
+            display: table;
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1px;
+            border: 1px solid #e5e5e5;
+            border-top: none;
+        }
+
+        .stat {
+            display: table-cell;
+            width: 25%;
+            padding: 10px 14px;
+            border-right: 1px solid #e5e5e5;
+            vertical-align: top;
+        }
+
+        .stat:last-child { border-right: none; }
+
+        .stat-label {
+            font-size: 11px;
+            font-weight: bold;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            color: #111111;
+            margin-bottom: 4px;
+        }
+
+        .stat-value {
+            font-size: 18px;
+            font-weight: bold;
+            color: #0085a4;
+            line-height: 1;
+        }
+
+        .stat.total .stat-value {
+            color: #333333;
+        }
+
+        /* ── 饼图表格 ── */
+        .pie-wrap {
+            border: 1px solid #e5e5e5;
+            border-top: none;
+        }
+
+        .pie-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 11px;
+        }
+
+        .pie-table th {
+            background: #0085a4;
+            color: #ffffff;
+            font-size: 12px;
+            font-weight: bold;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            padding: 7px 12px;
+            text-align: left;
+        }
+
+        .pie-table td {
+            padding: 7px 12px;
+            border-bottom: 1px solid #efefef;
+            color: #333333;
+        }
+
+        .pie-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .pie-table .pct {
+            font-weight: bold;
+            color: #0085a4;
+        }
+
+        .pie-table tfoot td {
+            background: #f5f5f5;
+            font-weight: bold;
+            color: #111111;
+            border-top: 1px solid #e5e5e5;
+            border-bottom: none;
+        }
+
+        /* ── 页脚 ── */
+        .footer {
+            padding: 14px 36px;
+            border-top: 1px solid #e5e5e5;
+            font-size: 9px;
+            color: #aaaaaa;
+            display: table;
+            width: 100%;
+        }
+
+        .footer-left  { display: table-cell; text-align: left; }
+        .footer-right { display: table-cell; text-align: right; }
+    </style>
+</head>
+<body>
+
+<!-- 页眉 -->
+<div class="header">
+    <div class="header-label">Quality Control Report</div>
+    <div class="header-title" th:text="${qcFormName}">表单名称</div>
+    <div class="header-meta">
+        检测时间段：&nbsp;
+        <strong th:text="${startDateTime}">开始</strong>
+        &nbsp;—&nbsp;
+        <strong th:text="${endDateTime}">结束</strong>
+    </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- 正文 -->
+<div class="body">
+
+    <div class="section-label">检测数据</div>
+
+    <th:block th:each="chart, iterStat : ${charts}">
+        <div class="chart-block">
+
+            <div class="chart-index">
+                图表 <span th:text="${iterStat.count}">1</span>
+                &nbsp;·&nbsp;
+                <span th:if="${chart.chartType == 'line'}">趋势</span>
+                <span th:if="${chart.chartType == 'pie'}">分布</span>
+            </div>
+
+            <img th:if="${chart.chartImage != null and !chart.chartImage.isEmpty()}"
+                 th:src="@{${chart.chartImage}}" alt="图表" />
+
+            <!-- 折线图统计 -->
+            <th:block th:if="${chart.chartType == 'line'}">
+                <div class="stats">
+                    <div class="stat">
+                        <div class="stat-label">最大值</div>
+                        <div class="stat-value" th:text="${chart.max}">—</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-label">最小值</div>
+                        <div class="stat-value" th:text="${chart.min}">—</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-label">平均值</div>
+                        <div class="stat-value" th:text="${chart.average}">—</div>
+                    </div>
+                    <div class="stat total">
+                        <div class="stat-label">数据量</div>
+                        <div class="stat-value" th:text="${chart.total}">—</div>
+                    </div>
+                </div>
+            </th:block>
+
+            <!-- 饼图明细 -->
+            <th:block th:if="${chart.chartType == 'pie'}">
+                <div class="pie-wrap">
+                    <table class="pie-table">
+                        <thead>
+                            <tr>
+                                <th>分类</th>
+                                <th>数量</th>
+                                <th>占比</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr th:each="item : ${chart.info}">
+                                <td th:text="${item.label}">标签</td>
+                                <td th:text="${item.count}">0</td>
+                                <td class="pct"><span th:text="${item.percentage}">0.00</span>%</td>
+                            </tr>
+                        </tbody>
+                        <tfoot>
+                            <tr>
+                                <td>合计</td>
+                                <td th:text="${chart.total}">0</td>
+                                <td>100%</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </th:block>
+
+        </div>
+    </th:block>
+
+</div>
+
+<!-- 页脚 -->
+<div class="footer">
+    <div class="footer-left">FPS MES · 质量控制系统</div>
+    <div class="footer-right" th:text="${#dates.format(#dates.createNow(), 'yyyy-MM-dd HH:mm')}">日期</div>
+</div>
+
+</body>
+</html>

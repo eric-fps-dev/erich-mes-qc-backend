@@ -1,21 +1,32 @@
 package com.fps.svmes.services.impl;
 
 import com.fps.svmes.models.nosql.FormNode;
+import com.fps.svmes.models.sql.qcForm.QcFormTemplate;
+import com.fps.svmes.repositories.jpaRepo.qcForm.QcFormTemplateRepository;
+import com.fps.svmes.repositories.jpaRepo.user.TeamFormRepository;
 import com.fps.svmes.repositories.mongoRepo.FormNodeRepository;
 import com.fps.svmes.services.FormNodeService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import jakarta.transaction.Transactional;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
 
 @Service
 public class FormNodeServiceImpl implements FormNodeService {
 
     @Autowired
     private FormNodeRepository repository;
+
+    @Autowired
+    private TeamFormRepository teamFormRepository;
+
+    @Autowired
+    private QcFormTemplateRepository qcFormTemplateRepository;
+
+    public static final Logger logger = LoggerFactory.getLogger(FormNodeServiceImpl.class);
 
     // Save a top-level node (new document)
     @Override
@@ -58,6 +69,7 @@ public class FormNodeServiceImpl implements FormNodeService {
 
     // Delete a node by ID or UUID (traverse if necessary)
     @Override
+    @Transactional
     public boolean deleteNodeByIdOrUuid(String id) {
         // Fetch all top-level nodes
         List<FormNode> nodes = repository.findAll();
@@ -66,6 +78,12 @@ public class FormNodeServiceImpl implements FormNodeService {
         for (int i = 0; i < nodes.size(); i++) {
             // Check if the root node's ID matches the given ID
             if (nodes.get(i).getId().equals(id)) {
+                // Clean team-form association for deleted form node
+                List<String> formNodeArr = new ArrayList<>();
+                collectFormIdsRecursively(nodes.get(i), formNodeArr);
+                teamFormRepository.deleteAllByFormIds(formNodeArr);
+                softDeleteTemplatesRecursively(nodes.get(i));
+
                 nodes.remove(i); // Remove the root node
                 repository.deleteById(id); // Persist the deletion
                 return true; // Successfully deleted
@@ -101,13 +119,21 @@ public class FormNodeServiceImpl implements FormNodeService {
     private boolean deleteNodeByIdOrUuid(FormNode currentNode, String id) {
         if (currentNode.getChildren() != null) {
             for (int i = 0; i < currentNode.getChildren().size(); i++) {
-                if (currentNode.getChildren().get(i).getId().equals(id)) {
+                FormNode child = currentNode.getChildren().get(i);
+                if (child.getId().equals(id)) {
+                    // Clean team-form association for deleted form node
+                    List<String> formNodeArr = new ArrayList<>();
+                    collectFormIdsRecursively(child, formNodeArr);
+                    teamFormRepository.deleteAllByFormIds(formNodeArr);
+                    softDeleteTemplatesRecursively(child);
+
                     currentNode.getChildren().remove(i); // Remove the matching child node
+
                     return true; // Successfully deleted
                 }
 
                 // Recursively search deeper
-                if (deleteNodeByIdOrUuid(currentNode.getChildren().get(i), id)) {
+                if (deleteNodeByIdOrUuid(child, id)) {
                     return true;
                 }
             }
@@ -153,6 +179,108 @@ public class FormNodeServiceImpl implements FormNodeService {
         return Optional.empty(); // Node not found
     }
 
+    @Override
+    public boolean moveNode(String movingNodeId, String newParentId) {
+        List<FormNode> roots = repository.findAll();
+
+        FormNode movingNode = null;
+        FormNode fromRoot = null;
+        boolean isRootNode = false;
+
+        // Step 1: Locate the moving node and its origin root
+        Iterator<FormNode> rootIter = roots.iterator();
+        while (rootIter.hasNext()) {
+            FormNode root = rootIter.next();
+
+            if (root.getId().equals(movingNodeId)) {
+                movingNode = root;
+                fromRoot = root;
+                isRootNode = true;
+                rootIter.remove(); // prepare for reinsertion
+                break;
+            }
+
+            movingNode = extractAndRemoveNode(root, movingNodeId);
+            if (movingNode != null) {
+                fromRoot = root;
+                break;
+            }
+        }
+
+        if (movingNode == null) {
+            logger.warn("❌ Moving node not found: {}", movingNodeId);
+            return false;
+        }
+
+        // Special case: Move to top-level (i.e., no parent)
+        if ("root".equalsIgnoreCase(newParentId)) {
+            repository.save(movingNode); // save as a new root document
+            if (!isRootNode) {
+                repository.save(fromRoot); // persist where it was removed from
+            } else {
+                repository.deleteById(movingNodeId); // cleanup duplicate
+            }
+            return true;
+        }
+
+        // Prevent loop: do not move under its own descendant
+        if (isDescendantOf(movingNode, newParentId)) {
+            logger.warn("⛔ Cannot move a node into its own descendant: {}", newParentId);
+            return false;
+        }
+
+        // Step 2: Find the target folder
+        for (FormNode root : roots) {
+            FormNode targetFolder = findNodeByIdOrUuid(root, newParentId).orElse(null);
+            if (targetFolder != null && "folder".equals(targetFolder.getNodeType())) {
+                if (targetFolder.getChildren() == null) {
+                    targetFolder.setChildren(new ArrayList<>());
+                }
+
+                targetFolder.getChildren().add(movingNode);
+
+                if (!isRootNode) {
+                    repository.save(fromRoot);
+                } else {
+                    repository.deleteById(movingNodeId);
+                }
+
+                repository.save(root);
+                return true;
+            }
+        }
+
+        logger.warn("❌ Target folder not found or not a folder: {}", newParentId);
+        return false;
+    }
+
+
+    private FormNode extractAndRemoveNode(FormNode current, String targetId) {
+        if (current.getChildren() == null) return null;
+
+        Iterator<FormNode> iterator = current.getChildren().iterator();
+        while (iterator.hasNext()) {
+            FormNode child = iterator.next();
+            if (child.getId().equals(targetId)) {
+                iterator.remove();
+                return child;
+            }
+            FormNode result = extractAndRemoveNode(child, targetId);
+            if (result != null) return result;
+        }
+        return null;
+    }
+
+    private boolean isDescendantOf(FormNode node, String possibleChildId) {
+        if (node.getChildren() == null) return false;
+
+        for (FormNode child : node.getChildren()) {
+            if (child.getId().equals(possibleChildId)) return true;
+            if (isDescendantOf(child, possibleChildId)) return true;
+        }
+        return false;
+    }
+
     // Helper method for recursive traversal
     private Optional<FormNode> findAndUpdateNodeRecursively(FormNode currentNode, String id, FormNode updatedNode) {
         if (currentNode.getId().equals(id)) {
@@ -186,7 +314,7 @@ public class FormNodeServiceImpl implements FormNodeService {
         return matchingNodes;
     }
 
-    // ✅ Recursive helper method to search within child nodes
+    // Recursive helper method to search within child nodes
     private void findMatchingNodesRecursively(FormNode currentNode, String keyword, List<FormNode> matchingNodes) {
         if (currentNode.getLabel().toLowerCase().contains(keyword)) {
             matchingNodes.add(currentNode);
@@ -198,5 +326,55 @@ public class FormNodeServiceImpl implements FormNodeService {
         }
     }
 
+    @Override
+    public void updateLabelByQcFormTemplateId(Long qcFormTemplateId, String newLabel) {
+        List<FormNode> roots = getAllNodes();
+        for (FormNode root : roots) {
+            if (updateLabelRecursive(root, qcFormTemplateId, newLabel)) {
+                saveNode(root);
+            }
+        }
+    }
 
+    private boolean updateLabelRecursive(FormNode node, Long templateId, String newLabel) {
+        boolean updated = false;
+        if (templateId.equals(node.getQcFormTemplateId())) {
+            node.setLabel(newLabel);
+            updated = true;
+        }
+        if (node.getChildren() != null) {
+            for (FormNode child : node.getChildren()) {
+                if (updateLabelRecursive(child, templateId, newLabel)) updated = true;
+            }
+        }
+        return updated;
+    }
+
+    // Grab all document type node ids for a target node.
+    private void collectFormIdsRecursively(FormNode node, List<String> result) {
+        if ("document".equalsIgnoreCase(node.getNodeType())) {
+            result.add(node.getId());
+        }
+
+        if (node.getChildren() != null) {
+            for (FormNode child : node.getChildren()) {
+                collectFormIdsRecursively(child, result);
+            }
+        }
+    }
+
+    // Collect all qcFormTemplateIds under a node and set their status to 0.
+    private void softDeleteTemplatesRecursively(FormNode node) {
+        if ("document".equalsIgnoreCase(node.getNodeType()) && node.getQcFormTemplateId() != null) {
+            qcFormTemplateRepository.findById(node.getQcFormTemplateId()).ifPresent(template -> {
+                template.setStatus(0);
+                qcFormTemplateRepository.save(template);
+            });
+        }
+        if (node.getChildren() != null) {
+            for (FormNode child : node.getChildren()) {
+                softDeleteTemplatesRecursively(child);
+            }
+        }
+    }
 }

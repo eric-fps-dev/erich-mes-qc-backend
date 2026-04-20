@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: ./Dev/variant-form3-vite
+    container_name: mes-qc-frontend-container
+    restart: always
+    ports:
+      # For demo environment use:
+      - "3002:80"
+      # For dev and sgb environment use:
+      # - "3001:80"
+
+  backend:
+    build:
+      context: ./Dev/mes-qc-backend
+    container_name: mes-qc-backend-container
+    restart: always
+    ports:
+      # For demo environment use:
+      - "8091:8091"
+      # For dev and sgb environment use:
+      # - "8090:8090"
+    environment:
+      # For demo environment use:
+      - SPRING_PROFILES_ACTIVE=staging
+      # For dev and sgb environment use:
+      # - SPRING_PROFILES_ACTIVE=dev
+

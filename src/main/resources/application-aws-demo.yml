@@ -1,0 +1,34 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://fps-db-pg-mes.cxsfb8x5xnpi.us-east-2.rds.amazonaws.com:5432/qc_demo
+    username: fps_controls
+    password: "Trump&Fps(Potato)"
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: false
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+        transaction.jta.platform: org.hibernate.engine.transaction.jta.platform.internal.NoJtaPlatform
+
+  data:
+    mongodb:
+      uri: mongodb+srv://fps_controls:Trump%26Fps%40Potato@cluster14082.cy975.mongodb.net/demo-qc?retryWrites=true&w=majority&appName=Cluster14082
+      database: demo-qc
+  security:
+    user:
+      name: fps-control
+      password: fpscontrols123
+
+feign:
+  client:
+    config:
+      s3-adapter-service:
+        url: http://s3-adapter-service:8083
+        connect-timeout: 5000
+        read-timeout: 5000

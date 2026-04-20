@@ -1,10 +1,11 @@
 # Use OpenJDK to run the Spring Boot application
-FROM openjdk:17-jdk-slim
+FROM azul/zulu-openjdk:21
 
 # Set the working directory
 WORKDIR /app
 
 # Expose port 8085
+# EXPOSE 8091
 EXPOSE 8090
 
 # Accept an argument to set the active profile
@@ -20,4 +21,5 @@ ENTRYPOINT ["sh", "-c", "java ${JAVA_OPTS} -jar /app/mes-qc-service.jar"]
 
 # Optional: Add a health check
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
-    CMD curl -f http://localhost:8090/actuator/health || exit 1
+    CMD curl -f http://localhost:8091/actuator/health || exit 1
+    # CMD curl -f http://localhost:8090/actuator/health || exit 1

@@ -1,6 +1,20 @@
 spring:
   profiles:
-    active: local
+    active: dev
+
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ${MAIL_USERNAME:erikyu.98414@gmail.com}
+    password: ${MAIL_PASSWORD:zaha mkbx kjmk gbal}
+    properties:
+      mail:
+        debug: false
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
 
   datasource:
     hikari:
@@ -35,3 +49,20 @@ management:
   endpoint:
     health:
       show-details: always
+
+qc:
+  snapshot:
+    api:
+      url: ${QC_SNAPSHOT_API_URL:http://localhost:8081}
+
+# File upload configuration
+file:
+  upload:
+    dir: ${FILE_UPLOAD_DIR:uploads}
+    base-url: ${FILE_UPLOAD_BASE_URL:}
+
+# Multipart file upload limits
+spring.servlet.multipart:
+  enabled: true
+  max-file-size: 50MB
+  max-request-size: 50MB

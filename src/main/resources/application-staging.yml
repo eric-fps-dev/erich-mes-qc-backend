@@ -1,6 +1,6 @@
 spring:
   datasource:
-    url: jdbc:postgresql://10.10.12.11:5432/mes
+    url: jdbc:postgresql://10.10.12.11:5432/mes_dev
     username: postgres
     password: postgres
     driver-class-name: org.postgresql.Driver
@@ -18,16 +18,22 @@ spring:
   data:
     mongodb:
       uri: mongodb://root:password@10.10.12.11:27017/dev-mes-qc?authSource=admin
+      database: dev-mes-qc
 
   security:
     user:
       name: fps-control
-      password: fpscontrols12#
+      password: fpscontrols123
 
 feign:
   client:
     config:
       s3-adapter-service:
-        url: http://10.10.12.11:8083
+        url: http://s3-adapter-service:8083
         connect-timeout: 5000
         read-timeout: 5000
+
+qc:
+  snapshot:
+    api:
+      url: ${QC_SNAPSHOT_API_URL:http://10.10.12.11:8010}

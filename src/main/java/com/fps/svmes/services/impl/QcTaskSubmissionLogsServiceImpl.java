@@ -4,14 +4,18 @@ import com.fps.svmes.dto.dtos.qcForm.QcTaskSubmissionLogsDTO;
 import com.fps.svmes.models.sql.qcForm.QcTaskSubmissionLogs;
 import com.fps.svmes.repositories.jpaRepo.qcForm.QcFormTemplateRepository;
 import com.fps.svmes.repositories.jpaRepo.qcForm.QcTaskSubmissionLogsRepository;
+import com.fps.svmes.repositories.jpaRepo.qcForm.QcApprovalAssignmentRepository;
+import com.fps.svmes.services.AlertRecordService;
+import com.fps.svmes.repositories.jpaRepo.user.UserRepository;
 import com.fps.svmes.services.QcTaskSubmissionLogsService;
-import com.fps.svmes.services.UserService;
+import com.fps.svmes.services.QcSnapshotSubmissionService;
 import com.itextpdf.text.Paragraph;
 
 import com.itextpdf.text.pdf.BaseFont;
 import com.itextpdf.text.pdf.PdfPCell;
 import com.itextpdf.text.pdf.PdfPTable;
 import com.itextpdf.text.pdf.PdfWriter;
+import com.mongodb.client.MongoCollection;
 import jakarta.validation.constraints.Null;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.Row;
@@ -20,6 +24,8 @@ import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.bson.types.ObjectId;
 import org.modelmapper.ModelMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
@@ -31,19 +37,15 @@ import java.io.InputStream;
 import java.time.*;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
-import java.util.Map;
+import java.util.*;
+import java.util.Collections;
 
 import org.bson.Document;
 
 import java.io.ByteArrayOutputStream;
 import java.time.format.DateTimeFormatter;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Optional;
 import java.util.stream.Collectors;
-
-import static com.fps.svmes.controllers.UserController.logger;
-
 
 @Service
 public class QcTaskSubmissionLogsServiceImpl implements QcTaskSubmissionLogsService {
@@ -60,14 +62,25 @@ public class QcTaskSubmissionLogsServiceImpl implements QcTaskSubmissionLogsServ
     private QcFormTemplateRepository qcFormTemplateRepository;
 
     @Autowired
-    private UserService userService;
+    private UserRepository userRepository;
+
+    public static Logger logger = LoggerFactory.getLogger(QcTaskSubmissionLogsService.class);
+
+    @Autowired
+    private AlertRecordService alertRecordService;
+
+    @Autowired
+    private QcSnapshotSubmissionService qcSnapshotSubmissionService;
+
+    @Autowired
+    private QcApprovalAssignmentRepository qcApprovalAssignmentRepository;
 
     @Override
     public QcTaskSubmissionLogsDTO insertLog(QcTaskSubmissionLogsDTO dto) {
         // Map the DTO to the entity
         QcTaskSubmissionLogs log = modelMapper.map(dto, QcTaskSubmissionLogs.class);
 
-        // Set timestamps to shanghai time
+        // Set timestamps to current time
         log.setCreatedAt(OffsetDateTime.now());
 
         // Save the entity
@@ -121,8 +134,6 @@ public class QcTaskSubmissionLogsServiceImpl implements QcTaskSubmissionLogsServ
             Document document = mongoTemplate.findOne(query, Document.class, collectionName);
 
             // adjust the document to categorize the results according to the form template
-
-
             if (document == null) {
                 logger.warn("No document found for submissionId: {}", submissionId);
                 return null;
@@ -159,6 +170,27 @@ public class QcTaskSubmissionLogsServiceImpl implements QcTaskSubmissionLogsServ
             throw new RuntimeException("Error parsing form template JSON", e);
         }
 
+        // Supplement with historical field mappings so records submitted before fields were
+        // removed/renamed still resolve to the correct labels.
+        try {
+            Query pairsQuery = new Query();
+            pairsQuery.addCriteria(Criteria.where("qc_form_template_id").is(formId));
+            Document pairsDoc = mongoTemplate.findOne(pairsQuery, Document.class, "form_template_key_label_pairs");
+            if (pairsDoc != null && pairsDoc.containsKey("fields")) {
+                List<Document> fields = pairsDoc.getList("fields", Document.class);
+                for (Document field : fields) {
+                    String key = field.getString("key");
+                    String label = field.getString("label");
+                    // Active fields take precedence; only fill gaps
+                    if (key != null && label != null && !keyValueMap.containsKey(key)) {
+                        keyValueMap.put(key, label);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Could not supplement key-label mapping from form_template_key_label_pairs for formId: {}", formId, e);
+        }
+
         return keyValueMap;
     }
 
@@ -183,6 +215,28 @@ public class QcTaskSubmissionLogsServiceImpl implements QcTaskSubmissionLogsServ
             throw new RuntimeException("Error parsing form template JSON", e);
         }
 
+        // Supplement with historical option items from form_template_key_label_pairs
+        try {
+            Query pairsQuery = new Query();
+            pairsQuery.addCriteria(Criteria.where("qc_form_template_id").is(formId));
+            Document pairsDoc = mongoTemplate.findOne(pairsQuery, Document.class, "form_template_key_label_pairs");
+            if (pairsDoc != null && pairsDoc.containsKey("option_items")) {
+                Document storedOptionItems = (Document) pairsDoc.get("option_items");
+                for (String fieldKey : storedOptionItems.keySet()) {
+                    if (!optionItemsKeyValueMap.containsKey(fieldKey)) {
+                        Document mapping = (Document) storedOptionItems.get(fieldKey);
+                        HashMap<String, String> valueToLabel = new HashMap<>();
+                        for (String v : mapping.keySet()) {
+                            valueToLabel.put(v, mapping.getString(v));
+                        }
+                        optionItemsKeyValueMap.put(fieldKey, valueToLabel);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Could not supplement option items from form_template_key_label_pairs for formId: {}", formId, e);
+        }
+
         return optionItemsKeyValueMap;
     }
 
@@ -191,9 +245,9 @@ public class QcTaskSubmissionLogsServiceImpl implements QcTaskSubmissionLogsServ
             // Extract options with optionItems
             Document options = (Document) widget.get("options");
             if (options != null) {
-                String label = options.getString("label");
+                String name = options.getString("name");
                 List<Document> optionItems = (List<Document>) options.get("optionItems");
-                if (label != null && optionItems != null) {
+                if (name != null && optionItems != null) {
                     HashMap<String, String> valueToLabelMap = new HashMap<>();
                     for (Document option : optionItems) {
                         Object value = option.get("value");
@@ -202,7 +256,7 @@ public class QcTaskSubmissionLogsServiceImpl implements QcTaskSubmissionLogsServ
                             valueToLabelMap.put(value.toString(), optionLabel);
                         }
                     }
-                    optionItemsKeyValueMap.put(label, valueToLabelMap);
+                    optionItemsKeyValueMap.put(name, valueToLabelMap);
                 }
             }
 
@@ -265,8 +319,8 @@ public class QcTaskSubmissionLogsServiceImpl implements QcTaskSubmissionLogsServ
         HashMap<String, String> fieldToDividerMap = new HashMap<>();
         List<Document> widgetList = getWidgetListFromTemplate(formId);
 
-        // **Step 1: 解析表单模板，构建字段归属的 `divider`**
-        String currentDivider = "未分类"; // 默认归类
+        // Step 1: 解析表单模板，构建字段归属的 `divider`
+        String currentDivider = "uncategorized"; // 默认归类
         for (Document widget : widgetList) {
             String type = widget.getString("type");
             Document options = (Document) widget.get("options");
@@ -291,41 +345,41 @@ public class QcTaskSubmissionLogsServiceImpl implements QcTaskSubmissionLogsServ
                     }
                 }
             } else if (options != null && options.containsKey("name")) {
-                // **记录字段属于哪个分组**
+                // 记录字段属于哪个分组
                 fieldToDividerMap.put(options.getString("name"), currentDivider);
             }
         }
 
-        // **Step 2: 重新格式化 MongoDB 取出的数据**
+        // Step 2: 重新格式化 MongoDB 取出的数据
         Document formattedDocument = new Document();
         Document groupedData = new Document();
 
         for (String key : document.keySet()) {
             Object value = document.get(key);
 
-            // **获取格式化后的字段名**
+            // 获取格式化后的字段名
             String formattedKey = keyValueMap.getOrDefault(key, key);
             String dividerLabel = fieldToDividerMap.get(key); // 获取字段归属的 `divider`
 
-            // **如果字段不属于任何 `divider`，默认归类到 `"未分类"`**
+            // 如果字段不属于任何 `divider`，默认归类到 `"uncategorized"`
             if (dividerLabel == null) {
-                dividerLabel = "未分类";
+                dividerLabel = "uncategorized";
             }
 
-            // **处理 optionItems 转换**
-            if (optionItemsKeyValueMap.containsKey(formattedKey) && value instanceof List) {
+            // 处理 optionItems 转换
+            if (optionItemsKeyValueMap.containsKey(key) && value instanceof List) {
                 List<?> valueList = (List<?>) value;
-                HashMap<String, String> valueToLabelMap = (HashMap<String, String>) optionItemsKeyValueMap.get(formattedKey);
+                HashMap<String, String> valueToLabelMap = (HashMap<String, String>) optionItemsKeyValueMap.get(key);
                 List<String> resolvedLabels = valueList.stream()
-                        .map(val -> valueToLabelMap.getOrDefault(val.toString(), val.toString()))
+                        .map(val -> val != null ? valueToLabelMap.getOrDefault(val.toString(), val.toString()) : null)
                         .collect(Collectors.toList());
                 value = resolvedLabels;
-            } else if (optionItemsKeyValueMap.containsKey(formattedKey) && (value instanceof String || value instanceof Integer)) {
-                HashMap<String, String> valueToLabelMap = (HashMap<String, String>) optionItemsKeyValueMap.get(formattedKey);
+            } else if (optionItemsKeyValueMap.containsKey(key) && value != null) {
+                HashMap<String, String> valueToLabelMap = (HashMap<String, String>) optionItemsKeyValueMap.get(key);
                 value = valueToLabelMap.getOrDefault(value.toString(), value.toString());
             }
 
-            // **保留 `_id`, `created_at`, `created_by` 在根层级**
+            // 保留 `_id`, `created_at`, `created_by` 在根层级
             if (List.of("_id", "created_at", "created_by").contains(key)) {
                 formattedDocument.put(formattedKey, value);
             } else {
@@ -334,6 +388,21 @@ public class QcTaskSubmissionLogsServiceImpl implements QcTaskSubmissionLogsServ
                 ((Document) groupedData.get(dividerLabel)).put(formattedKey, value);
             }
         }
+
+        // 🔧 Step 3: Remap exceeded_info keys from name → label
+        if (document.containsKey("exceeded_info")) {
+            Document exceededInfo = (Document) document.get("exceeded_info");
+            Document labeledExceededInfo = new Document();
+
+            for (String key : exceededInfo.keySet()) {
+                Object infoValue = exceededInfo.get(key);
+                String labeledKey = keyValueMap.getOrDefault(key, key); // key → label
+                labeledExceededInfo.put(labeledKey, infoValue);
+            }
+
+            formattedDocument.put("exceeded_info", labeledExceededInfo);
+        }
+
 
         // **合并分组数据到最终 JSON**
         formattedDocument.putAll(groupedData);
@@ -494,12 +563,10 @@ public class QcTaskSubmissionLogsServiceImpl implements QcTaskSubmissionLogsServ
                     chineseFont
             ));
 
-            // Find the person name using the UserService
-            String personName = userService.getUserById(
-                            Integer.parseInt(String.valueOf(mongoDocument.get("created_by"))))
-                    .getName();
+            String creatorName = userRepository.findNameById(Integer.parseInt(String.valueOf(mongoDocument.get("created_by"))));
+
             pdfDocument.add(new Paragraph(
-                    "提交人: " + personName,
+                    "提交人: " + (creatorName != null ? creatorName : "未知用户"),
                     chineseFont
             ));
 
@@ -513,27 +580,96 @@ public class QcTaskSubmissionLogsServiceImpl implements QcTaskSubmissionLogsServ
     }
 
     @Override
+    @org.springframework.transaction.annotation.Transactional("transactionManager")
     public void deleteSubmissionLog(String submissionId, String collectionName) {
-        // Check if collection exists
+        // 1. Check if collection exists
         if (!mongoTemplate.collectionExists(collectionName)) {
             throw new RuntimeException("Collection not found: " + collectionName);
         }
 
-        // Construct the MongoDB query
-        Query query = new Query();
-        query.addCriteria(Criteria.where("_id").is(submissionId));
+        // 2. Find the document by _id
+        ObjectId oid = new ObjectId(submissionId);
+        Query idQuery = new Query(Criteria.where("_id").is(oid));
+        Document document = mongoTemplate.findOne(idQuery, Document.class, collectionName);
 
-        // Execute the query and fetch the documents
-        List<Document> documents = mongoTemplate.find(query, Document.class, collectionName);
-
-        // Check if the document exists
-        if (documents.isEmpty()) {
+        // 3. Check if it exists
+        if (document == null) {
             throw new RuntimeException("Document not found: " + submissionId);
         }
 
-        // Delete the document
-        mongoTemplate.remove(query, collectionName);
+        // 4. Check if it has version_group_id
+        Object versionGroupId = document.get("version_group_id");
+
+        if (versionGroupId != null) {
+            // Find all submission IDs in this group to delete from snapshot service
+            Query groupQuery = new Query(Criteria.where("version_group_id").is(versionGroupId));
+            groupQuery.fields().include("_id");
+            List<Document> docs = mongoTemplate.find(groupQuery, Document.class, collectionName);
+
+            List<String> idsToDelete = docs.stream()
+                    .map(d -> d.getObjectId("_id").toString())
+                    .collect(Collectors.toList());
+
+            // Delete from snapshot service
+            qcSnapshotSubmissionService.deleteBySubmissionIds(idsToDelete);
+
+            // Delete associated alert records
+            alertRecordService.deleteBySubmissionIds(idsToDelete);
+
+            // Delete associated approval assignments
+            for (String id : idsToDelete) {
+                qcApprovalAssignmentRepository.deleteBySubmissionId(id);
+            }
+
+            // Delete all documents with the same version_group_id
+            Query deleteGroupQuery = new Query(Criteria.where("version_group_id").is(versionGroupId));
+            mongoTemplate.remove(deleteGroupQuery, collectionName);
+        } else {
+            // Delete from snapshot service
+            qcSnapshotSubmissionService.deleteBySubmissionId(submissionId);
+
+            // Delete associated alert records
+            alertRecordService.deleteBySubmissionIds(Collections.singletonList(submissionId));
+
+            // Delete associated approval assignments
+            qcApprovalAssignmentRepository.deleteBySubmissionId(submissionId);
+
+            // Delete only this document
+            mongoTemplate.remove(idQuery, collectionName);
+        }
     }
+
+    @Override
+    public Document getRawDocumentBySubmissionId(String submissionId, String collectionName) {
+        if (!ObjectId.isValid(submissionId)) {
+            throw new IllegalArgumentException("Invalid submissionId format: " + submissionId);
+        }
+
+        if (!mongoTemplate.collectionExists(collectionName)) {
+            throw new RuntimeException("Collection not found: " + collectionName);
+        }
+
+        Query query = new Query(Criteria.where("_id").is(new ObjectId(submissionId)));
+        Document rawDocument = mongoTemplate.findOne(query, Document.class, collectionName);
+
+        if (rawDocument == null) {
+            return null;
+        }
+
+        // 🔥 清洗掉不需要的 key (keep related_* fields for form edit pre-population)
+        Document cleanedDocument = new Document();
+        for (Map.Entry<String, Object> entry : rawDocument.entrySet()) {
+            String key = entry.getKey();
+            if (key.equals("exceeded_info") || key.equals("e-signature") || key.equals("approval_info") || key.equals("_id") || key.equals("created_at") || key.equals("created_by")) {
+                continue; // 跳过
+            }
+            cleanedDocument.put(key, entry.getValue());
+        }
+
+        return cleanedDocument;
+    }
+
+
 
     private String convertToLocalTime(String utcTime) {
         try {
@@ -553,5 +689,59 @@ public class QcTaskSubmissionLogsServiceImpl implements QcTaskSubmissionLogsServ
             return utcTime;
         }
     }
+
+    @Override
+    public List<Map<String, Object>> getFormTemplateFieldList(Long formId) {
+        String formTemplateJson = qcFormTemplateRepository.findFormTemplateJsonById(formId);
+        if (formTemplateJson == null || formTemplateJson.isEmpty()) {
+            throw new RuntimeException("Form template JSON not found for formId: " + formId);
+        }
+
+        List<Map<String, Object>> fieldList = new ArrayList<>();
+
+        try {
+            Document formTemplate = Document.parse(formTemplateJson);
+            List<Document> widgetList = (List<Document>) formTemplate.get("widgetList");
+            if (widgetList != null) {
+                extractFieldDetailList(widgetList, fieldList); // 🔁 recursive helper
+            }
+        } catch (Exception e) {
+            logger.error("Error parsing form template JSON for formId: {}", formId, e);
+            throw new RuntimeException("Error parsing form template JSON", e);
+        }
+
+        return fieldList;
+    }
+
+    private void extractFieldDetailList(List<Document> widgetList, List<Map<String, Object>> fieldList) {
+        for (Document widget : widgetList) {
+            Document options = (Document) widget.get("options");
+            if (options != null && options.containsKey("name") && options.containsKey("label")) {
+                Map<String, Object> field = new HashMap<>();
+                field.put("name", options.getString("name"));
+                field.put("label", options.getString("label"));
+                if (options.containsKey("optionItems")) {
+                    field.put("optionItems", options.get("optionItems"));
+                }
+                fieldList.add(field);
+            }
+
+            List<Document> nestedWidgetList = (List<Document>) widget.get("widgetList");
+            if (nestedWidgetList != null) {
+                extractFieldDetailList(nestedWidgetList, fieldList);
+            }
+
+            List<Document> cols = (List<Document>) widget.get("cols");
+            if (cols != null) {
+                for (Document col : cols) {
+                    List<Document> colWidgetList = (List<Document>) col.get("widgetList");
+                    if (colWidgetList != null) {
+                        extractFieldDetailList(colWidgetList, fieldList);
+                    }
+                }
+            }
+        }
+    }
+
 
 }

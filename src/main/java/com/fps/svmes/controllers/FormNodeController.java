@@ -6,10 +6,13 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Map;
 
+@Slf4j
 @RestController
 @RequestMapping("/form-nodes")
 @Tag(name = "Form Management API", description = "API for managing form nodes")
@@ -61,4 +64,17 @@ public class FormNodeController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
+    @PutMapping("/{id}/move")
+    public ResponseEntity<?> moveNode(@PathVariable String id, @RequestBody Map<String, String> payload) {
+        String newParentId = payload.get("newParentId");
+        log.info("🔁 Move request: id={}, newParentId={}", id, newParentId);
+
+        try {
+            boolean moved = service.moveNode(id, newParentId);
+            return moved ? ResponseEntity.ok().build() : ResponseEntity.badRequest().body("Move failed");
+        } catch (Exception e) {
+            log.error("❌ Move failed for node: {}", id, e);
+            return ResponseEntity.status(500).body("Server error");
+        }
+    }
 }

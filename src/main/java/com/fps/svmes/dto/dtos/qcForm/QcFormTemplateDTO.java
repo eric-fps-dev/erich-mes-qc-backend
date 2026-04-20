@@ -2,10 +2,7 @@ package com.fps.svmes.dto.dtos.qcForm;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fps.svmes.converters.JsonNodeConverter;
 import com.fps.svmes.dto.dtos.CommonDTO;
-import jakarta.persistence.Convert;
 import jakarta.persistence.Id;
 import lombok.Data;
 
@@ -21,4 +18,10 @@ public class QcFormTemplateDTO extends CommonDTO {
 
     @JsonProperty("form_template_json")
     private String formTemplateJson;
+
+    @JsonProperty("approval_type")
+    private String approvalType;
+
+    @JsonProperty("has_edit_history")
+    private Boolean hasEditHistory;
 }

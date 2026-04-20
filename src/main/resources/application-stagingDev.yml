@@ -1,0 +1,39 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://10.10.12.11:5432/qc_dev
+    username: postgres
+    password: postgres
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: false
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+        transaction.jta.platform: org.hibernate.engine.transaction.jta.platform.internal.NoJtaPlatform
+
+  data:
+    mongodb:
+      uri: mongodb://root:password@10.10.12.11:27017/dev-mes-qc-dev?authSource=admin
+      database: dev-mes-qc-dev
+
+  security:
+    user:
+      name: fps-control
+      password: fpscontrols123
+
+feign:
+  client:
+    config:
+      s3-adapter-service:
+        url: http://s3-adapter-service:8083
+        connect-timeout: 5000
+        read-timeout: 5000
+
+qc:
+  snapshot:
+    api:
+      url: ${QC_SNAPSHOT_API_URL:http://10.10.12.11:8010}
