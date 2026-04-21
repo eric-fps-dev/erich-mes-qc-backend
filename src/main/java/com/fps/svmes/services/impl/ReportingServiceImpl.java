@@ -71,7 +71,7 @@ public class ReportingServiceImpl implements ReportingService {
     }
 
     @Override
-    public List<WidgetDataDTO> extractWidgetDataWithCounts(Long formTemplateId, String startDateTime, String endDateTime) {
+    public List<WidgetDataDTO> extractWidgetDataWithCounts(Long formTemplateId, String startDateTime, String endDateTime, List<String> submissionStates) {
         // Set default start and end timestamps (Parse as UTC)
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
         Timestamp defaultStart = Timestamp.from(LocalDateTime.parse(startDateTime, formatter).atZone(ZoneOffset.UTC).toInstant());
@@ -88,7 +88,7 @@ public class ReportingServiceImpl implements ReportingService {
 
         // Apply updates step by step
         for (String collectionName : collectionNames) {
-            List<WidgetDataDTO> newData = processCollection(database, collectionName, widgetDataList, defaultStart, defaultEnd);
+            List<WidgetDataDTO> newData = processCollection(database, collectionName, widgetDataList, defaultStart, defaultEnd, submissionStates);
             mergeWidgetDataLists(widgetDataList, newData); // Merge instead of overwriting
         }
 
@@ -320,10 +320,13 @@ public class ReportingServiceImpl implements ReportingService {
             String collectionName,
             List<WidgetDataDTO> widgetDataList,
             Timestamp startDateTime,
-            Timestamp endDateTime
+            Timestamp endDateTime,
+            List<String> submissionStates
     ) {
         MongoCollection<Document> collection = database.getCollection(collectionName);
         List<WidgetDataDTO> updatedWidgets = new ArrayList<>();
+
+        boolean filterByState = submissionStates != null && !submissionStates.isEmpty();
 
         // Fetch all documents in range and filter for latest versions
         List<Document> allDocs = collection.find().into(new ArrayList<>());
@@ -338,6 +341,8 @@ public class ReportingServiceImpl implements ReportingService {
                  createdAt.isAfter(endDateTime.toInstant())) {
                  continue;
              }
+
+             if (filterByState && !submissionStates.contains(doc.getString("state"))) continue;
 
              String groupId = doc.getString("version_group_id");
              Integer version = doc.getInteger("version", 0);
@@ -574,7 +579,8 @@ public class ReportingServiceImpl implements ReportingService {
             Integer page,
             Integer size,
             String sort,
-            String search
+            String search,
+            List<String> submissionStates
     ) {
         MongoDatabase database = mongoClient.getDatabase(mongoDatabaseName);
 
@@ -592,12 +598,14 @@ public class ReportingServiceImpl implements ReportingService {
         Map<String, Document> originalVersionMap = new HashMap<>();
         Map<String, Document> standaloneRecordMap = new HashMap<>();
         Set<Integer> userIds = new HashSet<>();
+        boolean filterByState = submissionStates != null && !submissionStates.isEmpty();
 
         for (String collectionName : collectionNames) {
             MongoCollection<Document> collection = database.getCollection(collectionName);
 
             List<Document> allDocs = collection.find().into(new ArrayList<>());
             for (Document doc : allDocs) {
+                if (filterByState && !submissionStates.contains(doc.getString("state"))) continue;
                 String groupId = doc.getString("version_group_id");
                 Integer version = doc.getInteger("version", 0);
                 Date createdAt = doc.getDate("created_at");
@@ -722,7 +730,8 @@ public class ReportingServiceImpl implements ReportingService {
                                                            String startDateTime,
                                                            String endDateTime,
                                                            String search,
-                                                           String sort) {
+                                                           String sort,
+                                                           List<String> submissionStates) {
 
         MongoDatabase database = mongoClient.getDatabase(mongoDatabaseName);
 
@@ -742,6 +751,7 @@ public class ReportingServiceImpl implements ReportingService {
         Map<String, Document> originalVersionMap = new HashMap<>();
         Map<String, Document> standaloneRecordMap = new HashMap<>();
         Set<Integer> userIds = new HashSet<>();
+        boolean filterByState = submissionStates != null && !submissionStates.isEmpty();
 
         for (String colName : collectionNames) {
             MongoCollection<Document> col = database.getCollection(colName);
@@ -749,6 +759,8 @@ public class ReportingServiceImpl implements ReportingService {
             List<Document> docs = col.find().into(new ArrayList<>());
 
             for (Document d : docs) {
+                if (filterByState && !submissionStates.contains(d.getString("state"))) continue;
+
                 String gid      = d.getString("version_group_id");
                 Integer version = d.getInteger("version", 0);
                 Date createdAt = d.getDate("created_at");
@@ -1502,7 +1514,8 @@ public class ReportingServiceImpl implements ReportingService {
             Integer page,
             Integer size,
             String sort,
-            String search
+            String search,
+            List<String> submissionStates
     ) {
         MongoDatabase database = mongoClient.getDatabase(mongoDatabaseName);
 
@@ -1519,6 +1532,7 @@ public class ReportingServiceImpl implements ReportingService {
 
         Map<String, Document> latestVersionMap = new HashMap<>();
         Set<Integer> userIds = new HashSet<>();
+        boolean filterByState = submissionStates != null && !submissionStates.isEmpty();
 
         Instant filterStart = convertStringToInstant(effectiveStartDateTime);
         Instant filterEnd = convertStringToInstant(effectiveEndDateTime);
@@ -1538,6 +1552,8 @@ public class ReportingServiceImpl implements ReportingService {
                 if (createdAt.isBefore(filterStart) || createdAt.isAfter(filterEnd)) {
                     continue;
                 }
+
+                if (filterByState && !submissionStates.contains(doc.getString("state"))) continue;
 
                 // Filter by field value if optionValue is provided
                 if (optionValue != null && fieldName != null && !fieldName.isEmpty()) {

@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -31,9 +32,10 @@ public class ReportingController {
     public List<WidgetDataDTO> extractWidgetDataWithCounts(
             @RequestParam Long formTemplateId,
             @RequestParam(required = false) String startDateTime,
-            @RequestParam(required = false) String endDateTime
+            @RequestParam(required = false) String endDateTime,
+            @RequestParam(required = false) List<String> submissionStates
     ) {
-        return reportingService.extractWidgetDataWithCounts(formTemplateId, startDateTime, endDateTime);
+        return reportingService.extractWidgetDataWithCounts(formTemplateId, startDateTime, endDateTime, submissionStates);
     }
 
     /**
@@ -47,7 +49,8 @@ public class ReportingController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "15") int size,
             @RequestParam(required = false) String sort,
-            @RequestParam(required = false) String search
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) List<String> submissionStates
     ) {
         return reportingService.fetchQcRecordsPaged(
                 formTemplateId,
@@ -56,7 +59,8 @@ public class ReportingController {
                 page,
                 size,
                 sort,
-                search
+                search,
+                submissionStates
         );
     }
 
@@ -66,10 +70,11 @@ public class ReportingController {
             @RequestParam String startDateTime,
             @RequestParam String endDateTime,
             @RequestParam(required = false) String search,
-            @RequestParam(required = false) String sort) {
+            @RequestParam(required = false) String sort,
+            @RequestParam(required = false) List<String> submissionStates) {
 
         List<Document> allRecords = reportingService.fetchAllRecordsWithoutPagination(
-                formTemplateId, startDateTime, endDateTime, search, sort);
+                formTemplateId, startDateTime, endDateTime, search, sort, submissionStates);
 
         return ResponseEntity.ok(allRecords);
     }
@@ -138,7 +143,8 @@ public class ReportingController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "15") int size,
             @RequestParam(required = false) String sort,
-            @RequestParam(required = false) String search
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) List<String> submissionStates
     ) {
         return reportingService.fetchDrilldownRecords(
                 formTemplateId,
@@ -151,7 +157,8 @@ public class ReportingController {
                 page,
                 size,
                 sort,
-                search
+                search,
+                submissionStates
         );
     }
 

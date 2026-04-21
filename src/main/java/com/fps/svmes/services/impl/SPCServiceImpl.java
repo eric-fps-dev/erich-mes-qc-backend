@@ -142,12 +142,16 @@ public class SPCServiceImpl implements SPCService {
                 Filters.lte("created_at", end)
         );
 
+        List<String> stateFilter = request.getSubmissionStates();
+        boolean filterByState = stateFilter != null && !stateFilter.isEmpty();
+
         // Collect all matching documents across shards, deduplicate by version_group_id
         // keeping only the highest version per group (same logic as ReportingServiceImpl)
         Map<String, Document> latestVersionMap = new LinkedHashMap<>();
         for (String collectionName : collectionNames) {
             MongoCollection<Document> collection = database.getCollection(collectionName);
             for (Document doc : collection.find(filter)) {
+                if (filterByState && !stateFilter.contains(doc.getString("state"))) continue;
                 String groupId = doc.getString("version_group_id");
                 if (groupId != null) {
                     int version = doc.getInteger("version", 0);

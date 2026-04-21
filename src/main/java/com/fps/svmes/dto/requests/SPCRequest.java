@@ -9,6 +9,7 @@ import lombok.NoArgsConstructor;
 
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.List;
 
 @Data
 @AllArgsConstructor
@@ -31,4 +32,7 @@ public class SPCRequest {
 
     @Schema(description = "List of Fields", example = "['field_1', 'field_2']")
     private ArrayList<String> fields;
+
+    @Schema(description = "Filter by submission states (e.g. draft, under_review). Null or empty = all states.", example = "[\"draft\", \"under_review\"]")
+    private List<String> submissionStates;
 }
