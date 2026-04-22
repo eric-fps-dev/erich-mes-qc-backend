@@ -104,7 +104,6 @@ public class ApprovalController {
             approvalAssignmentService.approveAction(
                     request.getSubmissionId(),
                     request.getCollectionName(),
-                    request.getRole(),
                     request.getApproverId(),
                     request.getComment(),
                     request.isSuggestRetest(),

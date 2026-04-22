@@ -1,4 +1,4 @@
-package com.fps.svmes.repositories.jpaRepo.user;
+/*package com.fps.svmes.repositories.jpaRepo.user;
 
 import com.fps.svmes.dto.dtos.user.TeamForUserTableDTO;
 import com.fps.svmes.models.sql.user.TeamUser;
@@ -25,19 +25,21 @@ public interface TeamUserRepository extends JpaRepository<TeamUser, Integer> {
 
     void deleteById(TeamUserId teamUserId);
 
-    @Query("SELECT new com.fps.svmes.dto.dtos.user.TeamForUserTableDTO(s.id, s.name, l.name) " +
-            "FROM TeamUser su " +
-            "JOIN su.team s " +
-            "LEFT JOIN s.leader l " +
-            "WHERE su.id.userId = :userId")
+    @Query("""
+        SELECT new com.fps.svmes.dto.dtos.user.TeamForUserTableDTO(s.id, s.name, l.name)
+        FROM TeamUser su
+        JOIN su.team s
+        LEFT JOIN s.leader l
+        WHERE su.id.userId = :userId
+        """)
     List<TeamForUserTableDTO> findTeamsByUserId(@Param("userId") Integer userId);
 
     @Modifying
     @Transactional
     @Query("""
-       DELETE FROM TeamUser tu
-       WHERE tu.id.teamId = :teamId
-         AND tu.id.userId IN :userIds
-       """)
+        DELETE FROM TeamUser tu
+        WHERE tu.id.teamId = :teamId
+          AND tu.id.userId IN :userIds
+        """)
     void deleteByTeamIdAndUserIdIn(Integer teamId, List<Integer> userIds);
-}
+}*/

@@ -1,5 +1,6 @@
 package com.fps.svmes.dto.dtos.user;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fps.svmes.dto.dtos.CommonDTO;
@@ -14,21 +15,24 @@ import java.util.List;
 public class UserDTO extends CommonDTO {
 
     @JsonProperty("id")
-    private Integer id;
+    private Long id;
 
-    @JsonProperty("name")
-    private String name;
+    @JsonProperty("first_name")
+    private String firstName;
 
-    @JsonProperty("role")
-    private RoleDTO role;
+    @JsonProperty("last_name")
+    private String lastName;
 
-    @JsonProperty("wecom_id")
-    private String wecomId;
+    @JsonProperty("full_name")
+    private String fullName;
+
+    @JsonProperty("employee_number")
+    private String employeeNumber;
 
     @JsonProperty("username")
     private String username;
 
-    @JsonProperty("password")
+    @JsonIgnore
     private String password;
 
     @JsonProperty("email")
@@ -37,12 +41,15 @@ public class UserDTO extends CommonDTO {
     @JsonProperty("phone_number")
     private String phoneNumber;
 
-    @JsonProperty("teams")
-    private List<TeamForUserTableDTO> teams;
+    @JsonProperty("role_list")
+    private List<UserRoleDTO> roleList;
 
-    @JsonProperty("leadership_teams")
-    private List<Integer> leadershipTeams;
-
-    @JsonProperty("activation_status")
-    private Short activationStatus;
+//    @JsonProperty("teams")
+//    private List<TeamForUserTableDTO> teams;
+//
+//    @JsonProperty("leadership_teams")
+//    private List<Integer> leadershipTeams;
+//
+//    @JsonProperty("activation_status")
+//    private Short activationStatus;
 }

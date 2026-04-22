@@ -7,6 +7,7 @@ import lombok.Data;
 @Data
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class TeamForUserTableDTO {
+
     @JsonProperty("id")
     private Integer id;
 
@@ -14,7 +15,7 @@ public class TeamForUserTableDTO {
     private String name;
 
     @JsonProperty("leader_name")
-    private String leaderName; // Only store the leader's name for this
+    private String leaderName;
 
     public TeamForUserTableDTO(Integer id, String name, String leaderName) {
         this.id = id;

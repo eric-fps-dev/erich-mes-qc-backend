@@ -9,29 +9,15 @@ import java.util.Objects;
 @Data
 @Embeddable
 public class TeamUserId implements Serializable {
+
     private Integer teamId;
     private Integer userId;
 
-    public TeamUserId() {}
+    public TeamUserId() {
+    }
 
     public TeamUserId(Integer teamId, Integer userId) {
         this.teamId = teamId;
-        this.userId = userId;
-    }
-
-    public Integer getTeamId() {
-        return teamId;
-    }
-
-    public void setTeamId(Integer teamId) {
-        this.teamId = teamId;
-    }
-
-    public Integer getUserId() {
-        return userId;
-    }
-
-    public void setUserId(Integer userId) {
         this.userId = userId;
     }
 
@@ -40,7 +26,8 @@ public class TeamUserId implements Serializable {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         TeamUserId that = (TeamUserId) o;
-        return Objects.equals(teamId, that.teamId) && Objects.equals(userId, that.userId);
+        return Objects.equals(teamId, that.teamId)
+                && Objects.equals(userId, that.userId);
     }
 
     @Override

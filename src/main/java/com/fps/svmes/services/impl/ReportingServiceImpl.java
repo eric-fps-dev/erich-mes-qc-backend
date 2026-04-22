@@ -7,8 +7,9 @@ import com.fps.svmes.dto.dtos.reporting.OptionItemDTO;
 import com.fps.svmes.dto.dtos.reporting.TimeBucketedOptionDTO;
 import com.fps.svmes.dto.dtos.reporting.WidgetDataDTO;
 import com.fps.svmes.repositories.jpaRepo.qcForm.QcFormTemplateRepository;
+import com.fps.svmes.repositories.jpaRepo.user.UserRepository;
 import com.fps.svmes.services.ReportingService;
-import com.fps.svmes.services.UserService;
+import com.fps.shared.entity.primary.user.User;
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
@@ -18,7 +19,6 @@ import org.bson.types.ObjectId;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-
 import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
 import java.time.Instant;
@@ -53,7 +53,7 @@ public class ReportingServiceImpl implements ReportingService {
     QcFormTemplateRepository qcFormTemplateRepository;
 
     @Autowired
-    UserService userService;
+    UserRepository userRepository;
 
     @Value("${spring.data.mongodb.database}")
     private String mongoDatabaseName;
@@ -81,6 +81,8 @@ public class ReportingServiceImpl implements ReportingService {
         List<WidgetDataDTO> widgetDataList = extractWidgetData(jsonInput);
         MongoDatabase database = mongoClient.getDatabase(mongoDatabaseName);
 
+        appendDeletedFields(formTemplateId, widgetDataList, database);
+
         // Use updated generateCollectionNames with default timestamps
         List<String> collectionNames = generateCollectionNames(formTemplateId, defaultStart, defaultEnd);
 
@@ -91,6 +93,58 @@ public class ReportingServiceImpl implements ReportingService {
         }
 
         return widgetDataList;
+    }
+
+    private void appendDeletedFields(Long formTemplateId, List<WidgetDataDTO> widgetDataList, MongoDatabase database) {
+        try {
+            MongoCollection<Document> pairsCollection = database.getCollection("form_template_key_label_pairs");
+            Document pairsDoc = pairsCollection.find(eq("qc_form_template_id", formTemplateId)).first();
+            if (pairsDoc == null) return;
+
+            List<Document> fields = pairsDoc.getList("fields", Document.class);
+            if (fields == null) return;
+
+            Document optionItemsDoc = pairsDoc.containsKey("option_items")
+                    ? (Document) pairsDoc.get("option_items")
+                    : new Document();
+
+            Set<String> existingNames = widgetDataList.stream()
+                    .map(WidgetDataDTO::getName)
+                    .collect(Collectors.toSet());
+
+            for (Document field : fields) {
+                if (!"true".equals(field.getString("deleted"))) continue;
+                String key = field.getString("key");
+                if (key == null || existingNames.contains(key)) continue;
+
+                String label = field.getString("label");
+                String type = field.getOrDefault("type", "other").toString();
+
+                if ("number".equals(type)) {
+                    WidgetDataDTO dto = new WidgetDataDTO(key, label, "number", new ArrayList<>(), null, null);
+                    dto.setDeleted(true);
+                    widgetDataList.add(dto);
+                } else if ("select".equals(type) || "radio".equals(type) || "checkbox".equals(type)) {
+                    List<OptionItemDTO> optionList = new ArrayList<>();
+                    if (optionItemsDoc.containsKey(key)) {
+                        Document valueToLabel = (Document) optionItemsDoc.get(key);
+                        for (String v : valueToLabel.keySet()) {
+                            try {
+                                int intValue = Integer.parseInt(v);
+                                optionList.add(new OptionItemDTO(valueToLabel.getString(v), intValue, 0));
+                            } catch (NumberFormatException ignored) {}
+                        }
+                    }
+                    if (!optionList.isEmpty()) {
+                        WidgetDataDTO dto = new WidgetDataDTO(key, label, type, optionList, null, null);
+                        dto.setDeleted(true);
+                        widgetDataList.add(dto);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // Non-fatal: deleted field append failure should not break chart loading
+        }
     }
 
     private void mergeWidgetDataLists(List<WidgetDataDTO> originalList, List<WidgetDataDTO> newList) {
@@ -323,7 +377,7 @@ public class ReportingServiceImpl implements ReportingService {
                         Date rawDate = doc.getDate("created_at");
                         if (rawDate != null) {
                              String formattedDate = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
-                                     .withZone(ZoneId.systemDefault())
+                                     .withZone(ZoneId.of("UTC"))
                                      .format(rawDate.toInstant());
                              xaxisData.add(formattedDate);
                         }
@@ -475,8 +529,15 @@ public class ReportingServiceImpl implements ReportingService {
         }
 
         // Bulk fetch user names
-        Map<Integer, String> userNameMap = userService.getUsersByIds(new ArrayList<>(userIds)).stream()
-                .collect(Collectors.toMap(u -> u.getId(), u -> u.getName()));
+//        Map<Integer, String> userNameMap = userService.getUsersByIds(new ArrayList<>(userIds)).stream()
+//                .collect(Collectors.toMap(u -> u.getId(), u -> u.getName()));
+
+        // Bulk fetch user names from local DB
+        Map<Long, String> userNameMap = userRepository.findAllByIdIn(userIds).stream()
+                .collect(Collectors.toMap(
+                        User::getId,
+                        User::getFullName
+                ));
 
         // Convert and return only the latest versions
         return latestVersionMap.values().stream()
@@ -524,38 +585,81 @@ public class ReportingServiceImpl implements ReportingService {
         // Identify relevant collections
         List<String> collectionNames = getRelevantCollections(database, formTemplateId, startDateTime, endDateTime);
 
+        Instant startInstant = convertStringToInstant(startDateTime);
+        Instant endInstant = convertStringToInstant(endDateTime);
+
         Map<String, Document> latestVersionMap = new HashMap<>();
+        Map<String, Document> originalVersionMap = new HashMap<>();
+        Map<String, Document> standaloneRecordMap = new HashMap<>();
         Set<Integer> userIds = new HashSet<>();
 
         for (String collectionName : collectionNames) {
             MongoCollection<Document> collection = database.getCollection(collectionName);
 
-            List<Document> allDocs = queryRecords(collection, startDateTime, endDateTime, 0, Integer.MAX_VALUE);
+            List<Document> allDocs = collection.find().into(new ArrayList<>());
             for (Document doc : allDocs) {
                 String groupId = doc.getString("version_group_id");
                 Integer version = doc.getInteger("version", 0);
+                Date createdAt = doc.getDate("created_at");
 
                 if (doc.containsKey("created_by") && doc.get("created_by") instanceof Number) {
                     userIds.add(((Number) doc.get("created_by")).intValue());
                 }
 
                 if (groupId != null) {
-                    Document existing = latestVersionMap.get(groupId);
-                    if (existing == null || version > existing.getInteger("version", 0)) {
+                    Document existingLatest = latestVersionMap.get(groupId);
+                    if (existingLatest == null
+                            || version > existingLatest.getInteger("version", 0)
+                            || (Objects.equals(version, existingLatest.getInteger("version", 0))
+                            && createdAt != null
+                            && (existingLatest.getDate("created_at") == null || createdAt.after(existingLatest.getDate("created_at"))))) {
                         latestVersionMap.put(groupId, doc);
                     }
+
+                    Document existingOriginal = originalVersionMap.get(groupId);
+                    if (existingOriginal == null
+                            || version < existingOriginal.getInteger("version", 0)
+                            || (Objects.equals(version, existingOriginal.getInteger("version", 0))
+                            && createdAt != null
+                            && (existingOriginal.getDate("created_at") == null || createdAt.before(existingOriginal.getDate("created_at"))))) {
+                        originalVersionMap.put(groupId, doc);
+                    }
                 } else {
-                    latestVersionMap.put(doc.getObjectId("_id").toString(), doc);
+                    if (createdAt != null
+                            && !createdAt.toInstant().isBefore(startInstant)
+                            && !createdAt.toInstant().isAfter(endInstant)) {
+                        standaloneRecordMap.put(doc.getObjectId("_id").toString(), doc);
+                    }
                 }
             }
         }
 
+        Map<String, Document> includedRecords = new HashMap<>(standaloneRecordMap);
+        for (Map.Entry<String, Document> entry : latestVersionMap.entrySet()) {
+            String groupId = entry.getKey();
+            Document latestDoc = entry.getValue();
+            Document originalDoc = originalVersionMap.get(groupId);
+            Date originalCreatedAt = originalDoc != null ? originalDoc.getDate("created_at") : null;
+
+            if (originalCreatedAt != null
+                    && !originalCreatedAt.toInstant().isBefore(startInstant)
+                    && !originalCreatedAt.toInstant().isAfter(endInstant)) {
+                includedRecords.put(groupId, latestDoc);
+            }
+        }
+
         // Bulk fetch user names
-        Map<Integer, String> userNameMap = userService.getUsersByIds(new ArrayList<>(userIds)).stream()
-                .collect(Collectors.toMap(u -> u.getId(), u -> u.getName()));
+//        Map<Integer, String> userNameMap = userService.getUsersByIds(new ArrayList<>(userIds)).stream()
+//                .collect(Collectors.toMap(u -> u.getId(), u -> u.getName()));
+        Map<Long, String> userNameMap =
+                userRepository.findAllByIdIn(userIds).stream()
+                        .collect(Collectors.toMap(
+                                User::getId,
+                                User::getFullName
+                        ));
 
         // Stream Pipeline: Format -> Filter -> Sort
-        Stream<Document> stream = latestVersionMap.values().parallelStream()
+        Stream<Document> stream = includedRecords.values().parallelStream()
                 .map(doc -> formattedResult(doc, optionItemsKeyValueMap, keyValueMap, userNameMap));
 
         // 2. Filter (search) on visible field values only (excluding metadata fields)
@@ -630,41 +734,83 @@ public class ReportingServiceImpl implements ReportingService {
         List<String> collectionNames = getRelevantCollections(database, formTemplateId,
                 startDateTime, endDateTime);
 
+        Instant startInstant = convertStringToInstant(startDateTime);
+        Instant endInstant = convertStringToInstant(endDateTime);
+
         /** ---------- 1. 取最新版本 ---------- */
         Map<String, Document> latestVersionMap = new HashMap<>();
+        Map<String, Document> originalVersionMap = new HashMap<>();
+        Map<String, Document> standaloneRecordMap = new HashMap<>();
         Set<Integer> userIds = new HashSet<>();
 
         for (String colName : collectionNames) {
             MongoCollection<Document> col = database.getCollection(colName);
 
-            // **0, Integer.MAX_VALUE** ：一次性取完
-            List<Document> docs = queryRecords(col, startDateTime, endDateTime, 0, Integer.MAX_VALUE);
+            List<Document> docs = col.find().into(new ArrayList<>());
 
             for (Document d : docs) {
                 String gid      = d.getString("version_group_id");
                 Integer version = d.getInteger("version", 0);
+                Date createdAt = d.getDate("created_at");
 
                 if (d.containsKey("created_by") && d.get("created_by") instanceof Number) {
                     userIds.add(((Number) d.get("created_by")).intValue());
                 }
 
                 if (gid != null) {
-                    Document existing = latestVersionMap.get(gid);
-                    if (existing == null || version > existing.getInteger("version", 0)) {
+                    Document existingLatest = latestVersionMap.get(gid);
+                    if (existingLatest == null
+                            || version > existingLatest.getInteger("version", 0)
+                            || (Objects.equals(version, existingLatest.getInteger("version", 0))
+                            && createdAt != null
+                            && (existingLatest.getDate("created_at") == null || createdAt.after(existingLatest.getDate("created_at"))))) {
                         latestVersionMap.put(gid, d);
                     }
+
+                    Document existingOriginal = originalVersionMap.get(gid);
+                    if (existingOriginal == null
+                            || version < existingOriginal.getInteger("version", 0)
+                            || (Objects.equals(version, existingOriginal.getInteger("version", 0))
+                            && createdAt != null
+                            && (existingOriginal.getDate("created_at") == null || createdAt.before(existingOriginal.getDate("created_at"))))) {
+                        originalVersionMap.put(gid, d);
+                    }
                 } else {
-                    latestVersionMap.put(d.getObjectId("_id").toString(), d);
+                    if (createdAt != null
+                            && !createdAt.toInstant().isBefore(startInstant)
+                            && !createdAt.toInstant().isAfter(endInstant)) {
+                        standaloneRecordMap.put(d.getObjectId("_id").toString(), d);
+                    }
                 }
             }
         }
 
+        Map<String, Document> includedRecords = new HashMap<>(standaloneRecordMap);
+        for (Map.Entry<String, Document> entry : latestVersionMap.entrySet()) {
+            String groupId = entry.getKey();
+            Document latestDoc = entry.getValue();
+            Document originalDoc = originalVersionMap.get(groupId);
+            Date originalCreatedAt = originalDoc != null ? originalDoc.getDate("created_at") : null;
+
+            if (originalCreatedAt != null
+                    && !originalCreatedAt.toInstant().isBefore(startInstant)
+                    && !originalCreatedAt.toInstant().isAfter(endInstant)) {
+                includedRecords.put(groupId, latestDoc);
+            }
+        }
+
         // Bulk fetch user names
-        Map<Integer, String> userNameMap = userService.getUsersByIds(new ArrayList<>(userIds)).stream()
-                .collect(Collectors.toMap(u -> u.getId(), u -> u.getName()));
+//        Map<Integer, String> userNameMap = userService.getUsersByIds(new ArrayList<>(userIds)).stream()
+//                .collect(Collectors.toMap(u -> u.getId(), u -> u.getName()));
+        Map<Long, String> userNameMap =
+                userRepository.findAllByIdIn(userIds).stream()
+                        .collect(Collectors.toMap(
+                                User::getId,
+                                User::getFullName
+                        ));
 
         /** ---------- 2. Pipeline: Format -> Filter -> Sort ---------- */
-        Stream<Document> stream = latestVersionMap.values().parallelStream()
+        Stream<Document> stream = includedRecords.values().parallelStream()
                 .map(doc -> formattedResult(doc, optionItemsKeyValueMap, keyValueMap, userNameMap));
 
         if (search != null && !search.isEmpty()) {
@@ -727,12 +873,44 @@ public class ReportingServiceImpl implements ReportingService {
         });
 
         // Bulk fetch user names
-        Map<Integer, String> userNameMap = userService.getUsersByIds(new ArrayList<>(userIds)).stream()
-                .collect(Collectors.toMap(u -> u.getId(), u -> u.getName()));
+//        Map<Integer, String> userNameMap = userService.getUsersByIds(new ArrayList<>(userIds)).stream()
+//                .collect(Collectors.toMap(u -> u.getId(), u -> u.getName()));
+
+        Map<Long, String> userNameMap =
+                userRepository.findAllByIdIn(userIds).stream()
+                        .collect(Collectors.toMap(
+                                User::getId,
+                                User::getFullName
+                        ));
 
         return versionedDocs.stream()
                 .map(doc -> formattedResult(doc, optionItemsKeyValueMap, keyValueMap, userNameMap))
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    public Map<String, Object> debugTemplateData(Long formTemplateId, String startDateTime, String endDateTime) {
+        MongoDatabase database = mongoClient.getDatabase(mongoDatabaseName);
+        Map<String, Object> result = new LinkedHashMap<>();
+
+        // 1. Key-value map (includes deleted field mappings after fix)
+        HashMap<String, String> keyValueMap = getFormTemplateKeyValueMapping(formTemplateId);
+        result.put("keyValueMap", keyValueMap);
+
+        // 2. Relevant collections
+        List<String> collections = getRelevantCollections(database, formTemplateId, startDateTime, endDateTime);
+        result.put("relevantCollections", collections);
+
+        // 3. Raw keys from first document in each collection
+        Map<String, Object> rawKeysPerCollection = new LinkedHashMap<>();
+        for (String colName : collections) {
+            MongoCollection<Document> col = database.getCollection(colName);
+            Document firstDoc = col.find().first();
+            rawKeysPerCollection.put(colName, firstDoc != null ? new ArrayList<>(firstDoc.keySet()) : "empty");
+        }
+        result.put("rawDocumentKeys", rawKeysPerCollection);
+
+        return result;
     }
 
     // TODO: use MongoFormTemplateUtils
@@ -754,6 +932,27 @@ public class ReportingServiceImpl implements ReportingService {
             }
         } catch (Exception e) {
             throw new RuntimeException("Error parsing form template JSON", e);
+        }
+
+        // Supplement with soft-deleted field mappings so historical records that still
+        // contain deleted field data get their keys resolved to the correct labels.
+        try {
+            MongoDatabase database = mongoClient.getDatabase(mongoDatabaseName);
+            MongoCollection<Document> pairsCollection = database.getCollection("form_template_key_label_pairs");
+            Document pairsDoc = pairsCollection.find(new Document("qc_form_template_id", formId)).first();
+            if (pairsDoc != null && pairsDoc.containsKey("fields")) {
+                List<Document> fields = pairsDoc.getList("fields", Document.class);
+                for (Document field : fields) {
+                    String key = field.getString("key");
+                    String label = field.getString("label");
+                    // Only add if not already mapped by the active template (active fields take precedence)
+                    if (key != null && label != null && !keyValueMap.containsKey(key)) {
+                        keyValueMap.put(key, label);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // Non-fatal: deleted field labels won't resolve, but active fields still work
         }
 
         return keyValueMap;
@@ -791,7 +990,7 @@ public class ReportingServiceImpl implements ReportingService {
     }
 
     // TODO: use MongoFormTemplateUtils
-    private Document formattedResult(Document document, HashMap<String, Object> optionItemsKeyValueMap, HashMap<String, String> keyValueMap, Map<Integer, String> userNameMap) {
+    private Document formattedResult(Document document, HashMap<String, Object> optionItemsKeyValueMap, HashMap<String, String> keyValueMap, Map<Long, String> userNameMap) {
         Document formattedDocument = new Document();
 
         for (String key : document.keySet()) {
@@ -812,25 +1011,27 @@ public class ReportingServiceImpl implements ReportingService {
                 HashMap<String, String> valueToLabelMap = (HashMap<String, String>) optionItemsKeyValueMap.get(key);
 
                 List<String> resolvedLabels = valueList.stream()
-                        .map(val -> valueToLabelMap.getOrDefault(val.toString(), val.toString()))
+                        .map(val -> val != null ? valueToLabelMap.getOrDefault(val.toString(), val.toString()) : null)
                         .collect(Collectors.toList());
                 formattedDocument.put(formattedKey, resolvedLabels);
             }
-            // 如果 value 是单个数值并且有 label 映射，则转换
-            else if (optionItemsKeyValueMap.containsKey(key) && (value instanceof Integer || value instanceof String)) {
+            // 如果 value 有 label 映射，则转换（不限制类型）
+            else if (optionItemsKeyValueMap.containsKey(key) && value != null) {
                 HashMap<String, String> valueToLabelMap = (HashMap<String, String>) optionItemsKeyValueMap.get(key);
                 formattedDocument.put(formattedKey, valueToLabelMap.getOrDefault(value.toString(), value.toString()));
             } else {
                 formattedDocument.put(formattedKey, value);
             }
+        }
 
-            // 获取 `created_by` 并添加 `created_by_name` using bulk map
-            if (document.containsKey("created_by") && document.get("created_by") instanceof Number) {
-                Number createdByIdNum = (Number) document.get("created_by");
-                Integer createdById = createdByIdNum.intValue();
-                String creatorName = userNameMap.getOrDefault(createdById, "未知用户");
-                formattedDocument.put("提交人", creatorName); // 添加 `created_by_name`
-            }
+        // 获取 `created_by` 并添加 `created_by_name` using bulk map
+        if (document.containsKey("created_by") && document.get("created_by") instanceof Number) {
+            Number createdByIdNum = (Number) document.get("created_by");
+
+            // Match with long type as userNameMap key is long to avoid same number mismatch issue
+            Long createdById = createdByIdNum.longValue();
+            String creatorName = userNameMap.getOrDefault(createdById, "未知用户");
+            formattedDocument.put("提交人", creatorName); // 添加 `created_by_name`
         }
 
         // 🔧 Remap exceeded_info keys from fieldName to fieldLabel
@@ -913,6 +1114,62 @@ public class ReportingServiceImpl implements ReportingService {
             }
         } catch (Exception e) {
             throw new RuntimeException("Error parsing form template JSON", e);
+        }
+
+        // Supplement with historical option items from form_template_key_label_pairs for deleted fields
+        try {
+            MongoDatabase database = mongoClient.getDatabase(mongoDatabaseName);
+            MongoCollection<Document> pairsCollection = database.getCollection("form_template_key_label_pairs");
+            Document pairsDoc = pairsCollection.find(eq("qc_form_template_id", formId)).first();
+            if (pairsDoc != null && pairsDoc.containsKey("option_items")) {
+                Document storedOptionItems = (Document) pairsDoc.get("option_items");
+                for (String fieldKey : storedOptionItems.keySet()) {
+                    if (!optionItemsKeyValueMap.containsKey(fieldKey)) {
+                        Document mapping = (Document) storedOptionItems.get(fieldKey);
+                        HashMap<String, String> valueToLabel = new HashMap<>();
+                        for (String v : mapping.keySet()) {
+                            valueToLabel.put(v, mapping.getString(v));
+                        }
+                        optionItemsKeyValueMap.put(fieldKey, valueToLabel);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // Non-critical: log and continue with whatever was resolved from current template
+        }
+
+        // Final fallback: control_limit_setting.control_limits[field].optionItems
+        // This is always kept up-to-date (including deleted fields) by mergeControlLimitSettings.
+        try {
+            MongoDatabase database = mongoClient.getDatabase(mongoDatabaseName);
+            MongoCollection<Document> clsCollection = database.getCollection("control_limit_setting");
+            Document clsDoc = clsCollection.find(eq("qc_form_template_id", formId)).first();
+            if (clsDoc != null && clsDoc.containsKey("control_limits")) {
+                Document controlLimits = (Document) clsDoc.get("control_limits");
+                for (String fieldKey : controlLimits.keySet()) {
+                    if (!optionItemsKeyValueMap.containsKey(fieldKey)) {
+                        Object entry = controlLimits.get(fieldKey);
+                        if (entry instanceof Document) {
+                            List<Document> optionItems = ((Document) entry).getList("optionItems", Document.class);
+                            if (optionItems != null && !optionItems.isEmpty()) {
+                                HashMap<String, String> valueToLabel = new HashMap<>();
+                                for (Document item : optionItems) {
+                                    Object val = item.get("value");
+                                    String lbl = item.getString("label");
+                                    if (val != null && lbl != null) {
+                                        valueToLabel.put(val.toString(), lbl);
+                                    }
+                                }
+                                if (!valueToLabel.isEmpty()) {
+                                    optionItemsKeyValueMap.put(fieldKey, valueToLabel);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // Non-critical
         }
 
         return optionItemsKeyValueMap;
@@ -1327,8 +1584,15 @@ public class ReportingServiceImpl implements ReportingService {
         }
 
         // Bulk fetch user names
-        Map<Integer, String> userNameMap = userService.getUsersByIds(new ArrayList<>(userIds)).stream()
-                .collect(Collectors.toMap(u -> u.getId(), u -> u.getName()));
+//        Map<Integer, String> userNameMap = userService.getUsersByIds(new ArrayList<>(userIds)).stream()
+//                .collect(Collectors.toMap(u -> u.getId(), u -> u.getName()));
+
+        Map<Long, String> userNameMap =
+                userRepository.findAllByIdIn(userIds).stream()
+                        .collect(Collectors.toMap(
+                                User::getId,
+                                User::getFullName
+                        ));
 
         // Stream Pipeline: Format -> Filter -> Sort
         Stream<Document> stream = latestVersionMap.values().parallelStream()

@@ -1,12 +1,15 @@
 package com.fps.svmes.repositories.jpaRepo.user;
 
-import com.fps.svmes.models.sql.user.Role;
+import com.fps.shared.entity.primary.rbac.Role;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
-@Repository
-public interface RoleRepository extends JpaRepository<Role, Short> {
+import java.util.Optional;
 
-    // Example of a custom query method (if needed)
-    Role findByName(String name);
+@Repository
+public interface RoleRepository extends JpaRepository<Role, Integer> {
+
+    @EntityGraph(attributePaths = {"children"})
+    Optional<Role> findWithChildrenById(Integer id);
 }

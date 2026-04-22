@@ -1,6 +1,8 @@
 package com.fps.svmes.services.impl;
 
 import com.fps.svmes.models.nosql.FormNode;
+import com.fps.svmes.models.sql.qcForm.QcFormTemplate;
+import com.fps.svmes.repositories.jpaRepo.qcForm.QcFormTemplateRepository;
 import com.fps.svmes.repositories.jpaRepo.user.TeamFormRepository;
 import com.fps.svmes.repositories.mongoRepo.FormNodeRepository;
 import com.fps.svmes.services.FormNodeService;
@@ -20,6 +22,9 @@ public class FormNodeServiceImpl implements FormNodeService {
 
     @Autowired
     private TeamFormRepository teamFormRepository;
+
+    @Autowired
+    private QcFormTemplateRepository qcFormTemplateRepository;
 
     public static final Logger logger = LoggerFactory.getLogger(FormNodeServiceImpl.class);
 
@@ -77,6 +82,7 @@ public class FormNodeServiceImpl implements FormNodeService {
                 List<String> formNodeArr = new ArrayList<>();
                 collectFormIdsRecursively(nodes.get(i), formNodeArr);
                 teamFormRepository.deleteAllByFormIds(formNodeArr);
+                softDeleteTemplatesRecursively(nodes.get(i));
 
                 nodes.remove(i); // Remove the root node
                 repository.deleteById(id); // Persist the deletion
@@ -119,6 +125,7 @@ public class FormNodeServiceImpl implements FormNodeService {
                     List<String> formNodeArr = new ArrayList<>();
                     collectFormIdsRecursively(child, formNodeArr);
                     teamFormRepository.deleteAllByFormIds(formNodeArr);
+                    softDeleteTemplatesRecursively(child);
 
                     currentNode.getChildren().remove(i); // Remove the matching child node
 
@@ -319,6 +326,30 @@ public class FormNodeServiceImpl implements FormNodeService {
         }
     }
 
+    @Override
+    public void updateLabelByQcFormTemplateId(Long qcFormTemplateId, String newLabel) {
+        List<FormNode> roots = getAllNodes();
+        for (FormNode root : roots) {
+            if (updateLabelRecursive(root, qcFormTemplateId, newLabel)) {
+                saveNode(root);
+            }
+        }
+    }
+
+    private boolean updateLabelRecursive(FormNode node, Long templateId, String newLabel) {
+        boolean updated = false;
+        if (templateId.equals(node.getQcFormTemplateId())) {
+            node.setLabel(newLabel);
+            updated = true;
+        }
+        if (node.getChildren() != null) {
+            for (FormNode child : node.getChildren()) {
+                if (updateLabelRecursive(child, templateId, newLabel)) updated = true;
+            }
+        }
+        return updated;
+    }
+
     // Grab all document type node ids for a target node.
     private void collectFormIdsRecursively(FormNode node, List<String> result) {
         if ("document".equalsIgnoreCase(node.getNodeType())) {
@@ -328,6 +359,21 @@ public class FormNodeServiceImpl implements FormNodeService {
         if (node.getChildren() != null) {
             for (FormNode child : node.getChildren()) {
                 collectFormIdsRecursively(child, result);
+            }
+        }
+    }
+
+    // Collect all qcFormTemplateIds under a node and set their status to 0.
+    private void softDeleteTemplatesRecursively(FormNode node) {
+        if ("document".equalsIgnoreCase(node.getNodeType()) && node.getQcFormTemplateId() != null) {
+            qcFormTemplateRepository.findById(node.getQcFormTemplateId()).ifPresent(template -> {
+                template.setStatus(0);
+                qcFormTemplateRepository.save(template);
+            });
+        }
+        if (node.getChildren() != null) {
+            for (FormNode child : node.getChildren()) {
+                softDeleteTemplatesRecursively(child);
             }
         }
     }

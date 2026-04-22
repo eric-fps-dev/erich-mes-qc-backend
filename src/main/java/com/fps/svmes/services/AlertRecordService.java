@@ -12,9 +12,10 @@ import java.util.List;
 public interface AlertRecordService {
     AlertRecordDTO create(AlertRecordDTO dto);
     Page<DetailedAlertRecordDTO> getDetailedList(int page, int size);
-    AlertRecordDTO updateRecord(Long alertId, Integer newRpn, Integer userId);
-    AlertRecordDTO deleteRecord(Long alertId, Integer userId);
+    AlertRecordDTO updateRecord(Long alertId, Integer newRpn, Long userId);
+    AlertRecordDTO deleteRecord(Long alertId, Long userId);
     AlertSummaryDTO getAlertSummary();
+    AlertSummaryDTO getAlertSummary(AlertRecordFilterRequest request);
     Page<DetailedAlertRecordDTO> filterAlertRecords(AlertRecordFilterRequest request);
     void deleteBySubmissionIds(List<String> submissionIds);
 

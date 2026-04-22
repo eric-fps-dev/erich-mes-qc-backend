@@ -6,8 +6,8 @@ import com.fps.svmes.repositories.jpaRepo.qcForm.QcFormTemplateRepository;
 import com.fps.svmes.repositories.jpaRepo.qcForm.QcTaskSubmissionLogsRepository;
 import com.fps.svmes.repositories.jpaRepo.qcForm.QcApprovalAssignmentRepository;
 import com.fps.svmes.services.AlertRecordService;
+import com.fps.svmes.repositories.jpaRepo.user.UserRepository;
 import com.fps.svmes.services.QcTaskSubmissionLogsService;
-import com.fps.svmes.services.UserService;
 import com.fps.svmes.services.QcSnapshotSubmissionService;
 import com.itextpdf.text.Paragraph;
 
@@ -24,6 +24,8 @@ import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.bson.types.ObjectId;
 import org.modelmapper.ModelMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
@@ -45,9 +47,6 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import static com.fps.svmes.controllers.UserController.logger;
-
-
 @Service
 public class QcTaskSubmissionLogsServiceImpl implements QcTaskSubmissionLogsService {
     @Autowired
@@ -63,7 +62,9 @@ public class QcTaskSubmissionLogsServiceImpl implements QcTaskSubmissionLogsServ
     private QcFormTemplateRepository qcFormTemplateRepository;
 
     @Autowired
-    private UserService userService;
+    private UserRepository userRepository;
+
+    public static Logger logger = LoggerFactory.getLogger(QcTaskSubmissionLogsService.class);
 
     @Autowired
     private AlertRecordService alertRecordService;
@@ -169,6 +170,27 @@ public class QcTaskSubmissionLogsServiceImpl implements QcTaskSubmissionLogsServ
             throw new RuntimeException("Error parsing form template JSON", e);
         }
 
+        // Supplement with historical field mappings so records submitted before fields were
+        // removed/renamed still resolve to the correct labels.
+        try {
+            Query pairsQuery = new Query();
+            pairsQuery.addCriteria(Criteria.where("qc_form_template_id").is(formId));
+            Document pairsDoc = mongoTemplate.findOne(pairsQuery, Document.class, "form_template_key_label_pairs");
+            if (pairsDoc != null && pairsDoc.containsKey("fields")) {
+                List<Document> fields = pairsDoc.getList("fields", Document.class);
+                for (Document field : fields) {
+                    String key = field.getString("key");
+                    String label = field.getString("label");
+                    // Active fields take precedence; only fill gaps
+                    if (key != null && label != null && !keyValueMap.containsKey(key)) {
+                        keyValueMap.put(key, label);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Could not supplement key-label mapping from form_template_key_label_pairs for formId: {}", formId, e);
+        }
+
         return keyValueMap;
     }
 
@@ -193,6 +215,28 @@ public class QcTaskSubmissionLogsServiceImpl implements QcTaskSubmissionLogsServ
             throw new RuntimeException("Error parsing form template JSON", e);
         }
 
+        // Supplement with historical option items from form_template_key_label_pairs
+        try {
+            Query pairsQuery = new Query();
+            pairsQuery.addCriteria(Criteria.where("qc_form_template_id").is(formId));
+            Document pairsDoc = mongoTemplate.findOne(pairsQuery, Document.class, "form_template_key_label_pairs");
+            if (pairsDoc != null && pairsDoc.containsKey("option_items")) {
+                Document storedOptionItems = (Document) pairsDoc.get("option_items");
+                for (String fieldKey : storedOptionItems.keySet()) {
+                    if (!optionItemsKeyValueMap.containsKey(fieldKey)) {
+                        Document mapping = (Document) storedOptionItems.get(fieldKey);
+                        HashMap<String, String> valueToLabel = new HashMap<>();
+                        for (String v : mapping.keySet()) {
+                            valueToLabel.put(v, mapping.getString(v));
+                        }
+                        optionItemsKeyValueMap.put(fieldKey, valueToLabel);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Could not supplement option items from form_template_key_label_pairs for formId: {}", formId, e);
+        }
+
         return optionItemsKeyValueMap;
     }
 
@@ -201,9 +245,9 @@ public class QcTaskSubmissionLogsServiceImpl implements QcTaskSubmissionLogsServ
             // Extract options with optionItems
             Document options = (Document) widget.get("options");
             if (options != null) {
-                String label = options.getString("label");
+                String name = options.getString("name");
                 List<Document> optionItems = (List<Document>) options.get("optionItems");
-                if (label != null && optionItems != null) {
+                if (name != null && optionItems != null) {
                     HashMap<String, String> valueToLabelMap = new HashMap<>();
                     for (Document option : optionItems) {
                         Object value = option.get("value");
@@ -212,7 +256,7 @@ public class QcTaskSubmissionLogsServiceImpl implements QcTaskSubmissionLogsServ
                             valueToLabelMap.put(value.toString(), optionLabel);
                         }
                     }
-                    optionItemsKeyValueMap.put(label, valueToLabelMap);
+                    optionItemsKeyValueMap.put(name, valueToLabelMap);
                 }
             }
 
@@ -323,15 +367,15 @@ public class QcTaskSubmissionLogsServiceImpl implements QcTaskSubmissionLogsServ
             }
 
             // 处理 optionItems 转换
-            if (optionItemsKeyValueMap.containsKey(formattedKey) && value instanceof List) {
+            if (optionItemsKeyValueMap.containsKey(key) && value instanceof List) {
                 List<?> valueList = (List<?>) value;
-                HashMap<String, String> valueToLabelMap = (HashMap<String, String>) optionItemsKeyValueMap.get(formattedKey);
+                HashMap<String, String> valueToLabelMap = (HashMap<String, String>) optionItemsKeyValueMap.get(key);
                 List<String> resolvedLabels = valueList.stream()
-                        .map(val -> valueToLabelMap.getOrDefault(val.toString(), val.toString()))
+                        .map(val -> val != null ? valueToLabelMap.getOrDefault(val.toString(), val.toString()) : null)
                         .collect(Collectors.toList());
                 value = resolvedLabels;
-            } else if (optionItemsKeyValueMap.containsKey(formattedKey) && (value instanceof String || value instanceof Integer)) {
-                HashMap<String, String> valueToLabelMap = (HashMap<String, String>) optionItemsKeyValueMap.get(formattedKey);
+            } else if (optionItemsKeyValueMap.containsKey(key) && value != null) {
+                HashMap<String, String> valueToLabelMap = (HashMap<String, String>) optionItemsKeyValueMap.get(key);
                 value = valueToLabelMap.getOrDefault(value.toString(), value.toString());
             }
 
@@ -519,12 +563,10 @@ public class QcTaskSubmissionLogsServiceImpl implements QcTaskSubmissionLogsServ
                     chineseFont
             ));
 
-            // Find the person name using the UserService
-            String personName = userService.getUserById(
-                            Integer.parseInt(String.valueOf(mongoDocument.get("created_by"))))
-                    .getName();
+            String creatorName = userRepository.findNameById(Integer.parseInt(String.valueOf(mongoDocument.get("created_by"))));
+
             pdfDocument.add(new Paragraph(
-                    "提交人: " + personName,
+                    "提交人: " + (creatorName != null ? creatorName : "未知用户"),
                     chineseFont
             ));
 
