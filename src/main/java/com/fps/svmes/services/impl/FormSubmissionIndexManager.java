@@ -17,10 +17,19 @@ import java.util.regex.Pattern;
 @RequiredArgsConstructor
 @Slf4j
 public class FormSubmissionIndexManager {
+    /**
+     * Dynamic form submission collections follow this naming convention:
+     * form_template_{templateId}_{yyyyMM}
+     */
     private static final Pattern FORM_COLLECTION_PATTERN = Pattern.compile("^form_template_\\d+_\\d{6}$");
 
     private final MongoTemplate mongoTemplate;
 
+    /**
+     * Runs once after Spring finishes bean initialization.
+     Ensure indexes for approval instances and all existing form submission collections at startup.
+     New collections created later should also call ensureFormSubmissionIndexes().
+     */
     @PostConstruct
     public void ensureExistingIndexes() {
         ensureApprovalInstanceIndexes();
@@ -31,6 +40,8 @@ public class FormSubmissionIndexManager {
         }
     }
 
+    // Indexes support common form submission filters plus latest-first sorting.
+    // Keep this aligned with actual query patterns to avoid unnecessary index cost.
     public void ensureFormSubmissionIndexes(String collectionName) {
         IndexOperations indexOps = mongoTemplate.indexOps(collectionName);
         indexOps.ensureIndex(new Index().on("state", Sort.Direction.ASC).on("created_at", Sort.Direction.DESC));
@@ -46,6 +57,9 @@ public class FormSubmissionIndexManager {
         }
     }
 
+    // ApprovalInstance indexes support:
+    // 1. form submission linkage lookup
+    // 2. approval list filters using filterSnapshot fields
     private void ensureApprovalInstanceIndexes() {
         IndexOperations indexOps = mongoTemplate.indexOps(ApprovalInstance.class);
         indexOps.ensureIndex(new Index().on("formSubmissionCollectionName", Sort.Direction.ASC).on("formSubmissionId", Sort.Direction.ASC));

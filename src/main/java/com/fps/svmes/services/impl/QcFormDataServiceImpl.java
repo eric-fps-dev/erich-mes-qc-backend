@@ -22,6 +22,7 @@ import com.fps.svmes.services.QcFormDataService;
 import com.fps.svmes.services.QcFormTemplateService;
 import com.fps.svmes.services.QcSnapshotSubmissionService;
 import com.fps.svmes.services.SubmissionApprovalModelResolver;
+import com.fps.svmes.exceptions.InvalidRequestException;
 import com.fps.svmes.utils.MongoFormTemplateUtils;
 import com.mongodb.client.result.UpdateResult;
 import lombok.RequiredArgsConstructor;
@@ -83,14 +84,10 @@ public class QcFormDataServiceImpl implements QcFormDataService {
         Map<String, ExceededFieldInfoDTO> exceededInfoMap = controlLimitEvaluationService.evaluateExceededInfo(formTemplateId, formData);
         document.put("exceeded_info", exceededInfoMap);
 
-        // can be depreciated later on
-        String approvalType = qcFormTemplateService.getApprovalTypeByFormId(formTemplateId);
-        List<Map<String, Object>> approvalInfo = approvalInfoGeneratorService.generateApprovalInfo(approvalType, userId);
-        List<Document> draftSteps = normalizeStepsForDraft(approvalInfo);
-        document.put("approval_info", draftSteps);
-
+        // Single template fetch — approvalType, approvalTemplateId, and templateName all sourced from here.
         QcFormTemplateDTO template = qcFormTemplateService.getTemplateById(formTemplateId);
         String approvalTemplateId = template.getApprovalTemplateId();
+        String templateName = template.getName();
         boolean hasV2ApprovalTemplate = approvalTemplateId != null && !approvalTemplateId.isBlank();
 
         if (hasV2ApprovalTemplate) {
@@ -99,6 +96,13 @@ public class QcFormDataServiceImpl implements QcFormDataService {
         } else {
             log.debug("Form template {} has no approval_template_id; submission will use legacy approval model", formTemplateId);
         }
+
+        // Compat: approval_info and qc_approval_assignment are written for all submissions (including V2)
+        // to support old frontend clients that have not yet been redeployed against the V2 approval UI.
+        // Remove once the frontend deployment window is closed.
+        String approvalType = template.getApprovalType();
+        List<Map<String, Object>> approvalInfo = approvalInfoGeneratorService.generateApprovalInfo(approvalType, userId);
+        document.put("approval_info", normalizeStepsForDraft(approvalInfo));
 
         Document insertedDocument = mongoTemplate.insert(new Document(document), collectionName);
         String submissionId = insertedDocument.getObjectId("_id").toString();
@@ -114,7 +118,7 @@ public class QcFormDataServiceImpl implements QcFormDataService {
         }
 
         List<String> warnings = new ArrayList<>();
-        runPostInsertCompatibilityWork(submissionId, collectionName, formTemplateId, approvalType, userId, formData, warnings);
+        runPostInsertCompatibilityWork(submissionId, collectionName, formTemplateId, templateName, approvalType, userId, formData, warnings);
 
         Map<String, Object> response = new HashMap<>();
         response.put("object_id", submissionId);
@@ -176,9 +180,11 @@ public class QcFormDataServiceImpl implements QcFormDataService {
             log.debug("Skipping approval instance update for legacy submission edit: parent={}", parentSubmissionId);
         }
 
-        parent.put("state", previousRecordState.dbValue());
-        parent.put("updated_at", new Date());
-        mongoTemplate.save(parent, collectionName);
+        mongoTemplate.updateFirst(
+                submissionIdQuery(parentSubmissionId),
+                new Update().set("state", previousRecordState.dbValue()).set("updated_at", new Date()),
+                collectionName
+        );
 
         List<String> warnings = new ArrayList<>();
         runPostEditCompatibilityWork(parentSubmissionId, newSubmissionId, collectionName, formTemplateId, userId, newDoc, warnings);
@@ -266,12 +272,10 @@ public class QcFormDataServiceImpl implements QcFormDataService {
         }
 
         Long formTemplateId = parseTemplateId(collectionName);
+        var optionItems = mongoUtils.getOptionItemsKeyValueMapping(formTemplateId);
+        var templateMapping = mongoUtils.getFormTemplateKeyValueMapping(formTemplateId);
         return rawVersions.stream()
-                .map(doc -> mongoUtils.formatRecord(
-                        doc,
-                        mongoUtils.getOptionItemsKeyValueMapping(formTemplateId),
-                        mongoUtils.getFormTemplateKeyValueMapping(formTemplateId)
-                ))
+                .map(doc -> mongoUtils.formatRecord(doc, optionItems, templateMapping))
                 .collect(Collectors.toList());
     }
 
@@ -397,9 +401,6 @@ public class QcFormDataServiceImpl implements QcFormDataService {
         if (criteria.size() == 1) {
             return criteria.get(0);
         }
-        if (criteria.isEmpty()) {
-            return new Criteria();
-        }
         return new Criteria().andOperator(criteria.toArray(new Criteria[0]));
     }
 
@@ -447,7 +448,7 @@ public class QcFormDataServiceImpl implements QcFormDataService {
             case "form_submission_version", "formSubmissionVersion" -> "filterSnapshot.formSubmissionVersion";
             case "created_by", "createdBy" -> "filterSnapshot.createdBy";
             case "created_at", "createdAt" -> "filterSnapshot.createdAt";
-            default -> throw new IllegalArgumentException("Unsupported sort field for approval-instance listing: " + field);
+            default -> throw new InvalidRequestException("Unsupported sort field for approval-instance listing: " + field);
         };
         return Sort.by(request.getSortDirection(), mongoField).and(Sort.by(request.getSortDirection(), "_id"));
     }
@@ -567,12 +568,11 @@ public class QcFormDataServiceImpl implements QcFormDataService {
         return dto;
     }
 
-    private void createLegacyApprovalAssignment(String submissionId, String collectionName, Long formTemplateId, String approvalType) {
+    private void createLegacyApprovalAssignment(String submissionId, String collectionName, Long formTemplateId, String templateName, String approvalType) {
         QcApprovalAssignmentDTO assignmentDTO = new QcApprovalAssignmentDTO();
         assignmentDTO.setSubmissionId(submissionId);
         assignmentDTO.setQcFormTemplateId(formTemplateId);
-        QcFormTemplateDTO template = qcFormTemplateService.getTemplateById(formTemplateId);
-        assignmentDTO.setQcFormTemplateName(template.getName());
+        assignmentDTO.setQcFormTemplateName(templateName);
         assignmentDTO.setMongoCollection(collectionName);
         assignmentDTO.setApprovalType(approvalType);
         if ("flow_1".equals(approvalType)) {
@@ -628,13 +628,16 @@ public class QcFormDataServiceImpl implements QcFormDataService {
             String submissionId,
             String collectionName,
             Long formTemplateId,
+            String templateName,
             String approvalType,
             Long userId,
             Map<String, Object> formData,
             List<String> warnings
     ) {
+        // Compat: qc_approval_assignment row written for all submissions (including V2) to support old
+        // frontend clients during the deployment window. Remove once the window is closed.
         runCompatibilityStep("legacy_approval_assignment_failed", submissionId, collectionName, userId, warnings,
-                () -> createLegacyApprovalAssignment(submissionId, collectionName, formTemplateId, approvalType));
+                () -> createLegacyApprovalAssignment(submissionId, collectionName, formTemplateId, templateName, approvalType));
         runCompatibilityStep("alert_evaluation_failed", submissionId, collectionName, userId, warnings,
                 () -> controlLimitEvaluationService.evaluateAndTriggerAlerts(formTemplateId, userId, formData, submissionId));
     }
