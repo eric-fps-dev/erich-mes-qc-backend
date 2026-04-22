@@ -21,6 +21,7 @@ import com.fps.svmes.repositories.mongoRepo.ApprovalInstanceRepository;
 import com.fps.svmes.services.ApprovalInstanceService;
 import com.fps.svmes.services.ApprovalTemplateLookupService;
 import com.fps.svmes.services.FormSubmissionStateUpdater;
+import com.fps.svmes.services.SubmissionApprovalModelResolver;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.bson.Document;
@@ -48,10 +49,10 @@ public class ApprovalInstanceServiceImpl implements ApprovalInstanceService {
     private final RoleRepository roleRepository;
     private final ApprovalTemplateLookupService approvalTemplateLookupService;
     private final FormSubmissionStateUpdater formSubmissionStateUpdater;
+    private final SubmissionApprovalModelResolver approvalModelResolver;
 
     @Override
     public ApprovalInstance create(String formSubmissionId, String formSubmissionCollectionName, Long formTemplateId, String approvalTemplateId, Long createdBy) {
-        ensureApprovalInstanceCollectionExists();
         ApprovalTemplate template = findApprovalTemplateById(approvalTemplateId);
 
         ApprovalInstance instance = new ApprovalInstance();
@@ -70,12 +71,6 @@ public class ApprovalInstanceServiceImpl implements ApprovalInstanceService {
         instance.setUpdatedBy(createdBy);
         instance.setStatus(1);
         return approvalInstanceRepository.save(instance);
-    }
-
-    private void ensureApprovalInstanceCollectionExists() {
-        if (!mongoTemplate.collectionExists(ApprovalInstance.class)) {
-            mongoTemplate.createCollection(ApprovalInstance.class);
-        }
     }
 
     @Override
@@ -105,7 +100,7 @@ public class ApprovalInstanceServiceImpl implements ApprovalInstanceService {
     public void voidForFormSubmissionDelete(FormSubmissionActionRequest request) {
         ApprovalInstance instance = getActiveByFormSubmission(request.getSubmissionId(), request.getCollectionName());
         Document formSubmission = formSubmissionStateUpdater.getLatestFormSubmission(instance.getFormSubmissionId(), instance.getFormSubmissionCollectionName());
-        FormSubmissionState formSubmissionState = resolveFormSubmissionState(formSubmission);
+        FormSubmissionState formSubmissionState = approvalModelResolver.resolveLifecycleState(formSubmission);
         guard(List.of(FormSubmissionState.DRAFT, FormSubmissionState.UNDER_REVIEW, FormSubmissionState.ARCHIVED).contains(formSubmissionState),
                 "Only draft, under review, or archived form submissions can be voided.");
         markAllFutureStepsVoided(instance);
@@ -202,7 +197,7 @@ public class ApprovalInstanceServiceImpl implements ApprovalInstanceService {
         boolean structuralChange = hasStructuralChange(oldSteps, newSteps);
         int current = safeCurrent(instance);
         Document formSubmission = formSubmissionStateUpdater.getLatestFormSubmission(instance.getFormSubmissionId(), instance.getFormSubmissionCollectionName());
-        FormSubmissionState formState = resolveFormSubmissionState(formSubmission);
+        FormSubmissionState formState = approvalModelResolver.resolveLifecycleState(formSubmission);
         guard(List.of(FormSubmissionState.DRAFT, FormSubmissionState.PENDING_REVISION, FormSubmissionState.UNDER_REVIEW).contains(formState),
                 "Approval flow can only be edited while the form is draft, pending revision, or under review.");
         appendActionLog(instance, buildActionLog(instance, request, ApprovalAction.FLOW_EDITED, null, true, formSubmission));
@@ -253,8 +248,9 @@ public class ApprovalInstanceServiceImpl implements ApprovalInstanceService {
 
     @Override
     public void approve(FormSubmissionActionRequest request) {
-        ApprovalInstance instance = requireActionableUnderReview(request);
-        Document formSubmission = formSubmissionStateUpdater.getLatestFormSubmission(instance.getFormSubmissionId(), instance.getFormSubmissionCollectionName());
+        ActionableInstance actionable = requireActionableUnderReview(request);
+        ApprovalInstance instance = actionable.instance();
+        Document formSubmission = actionable.formSubmission();
         validateFreshApprovalData(request, instance, formSubmission);
         ApprovalInstanceStep current = currentStep(instance);
         guard(current.getStepState() == ApprovalStepState.IN_PROGRESS, "Current approval step is not in progress.");
@@ -301,8 +297,9 @@ public class ApprovalInstanceServiceImpl implements ApprovalInstanceService {
 
     @Override
     public void forward(FormSubmissionActionRequest request) {
-        ApprovalInstance instance = requireActionableUnderReview(request);
-        Document formSubmission = formSubmissionStateUpdater.getLatestFormSubmission(instance.getFormSubmissionId(), instance.getFormSubmissionCollectionName());
+        ActionableInstance actionable = requireActionableUnderReview(request);
+        ApprovalInstance instance = actionable.instance();
+        Document formSubmission = actionable.formSubmission();
         validateFreshApprovalData(request, instance, formSubmission);
         int currentSequence = safeCurrent(instance);
         guard(currentSequence < instance.getApprovalSteps().size() - 1, "Cannot forward because there is no next approval step.");
@@ -319,12 +316,16 @@ public class ApprovalInstanceServiceImpl implements ApprovalInstanceService {
         incrementVersion(instance);
         touch(instance, userIdForAudit(request));
         approvalInstanceRepository.save(instance);
+        populateFilterSnapshot(instance, formSubmission);
+        touch(instance, userIdForAudit(request));
+        approvalInstanceRepository.save(instance);
     }
 
     @Override
     public void rejectFullReset(FormSubmissionActionRequest request) {
-        ApprovalInstance instance = requireActionableUnderReview(request);
-        Document formSubmission = formSubmissionStateUpdater.getLatestFormSubmission(instance.getFormSubmissionId(), instance.getFormSubmissionCollectionName());
+        ActionableInstance actionable = requireActionableUnderReview(request);
+        ApprovalInstance instance = actionable.instance();
+        Document formSubmission = actionable.formSubmission();
         validateFreshApprovalData(request, instance, formSubmission);
         ApprovalInstanceStep current = currentStep(instance);
         guard(current.getStepState() == ApprovalStepState.IN_PROGRESS, "Current approval step is not in progress.");
@@ -366,8 +367,9 @@ public class ApprovalInstanceServiceImpl implements ApprovalInstanceService {
 
     @Override
     public void rejectPartialReset(FormSubmissionActionRequest request) {
-        ApprovalInstance instance = requireActionableUnderReview(request);
-        Document formSubmission = formSubmissionStateUpdater.getLatestFormSubmission(instance.getFormSubmissionId(), instance.getFormSubmissionCollectionName());
+        ActionableInstance actionable = requireActionableUnderReview(request);
+        ApprovalInstance instance = actionable.instance();
+        Document formSubmission = actionable.formSubmission();
         validateFreshApprovalData(request, instance, formSubmission);
         int currentSequence = safeCurrent(instance);
         guard(instance.getApprovalSteps().size() > 1 && currentSequence > 0, "Partial reset requires more than one step and a current step after the first.");
@@ -415,8 +417,9 @@ public class ApprovalInstanceServiceImpl implements ApprovalInstanceService {
 
     @Override
     public void rejectDiscard(FormSubmissionActionRequest request) {
-        ApprovalInstance instance = requireActionableUnderReview(request);
-        Document formSubmission = formSubmissionStateUpdater.getLatestFormSubmission(instance.getFormSubmissionId(), instance.getFormSubmissionCollectionName());
+        ActionableInstance actionable = requireActionableUnderReview(request);
+        ApprovalInstance instance = actionable.instance();
+        Document formSubmission = actionable.formSubmission();
         validateFreshApprovalData(request, instance, formSubmission);
         ApprovalInstanceStep current = currentStep(instance);
         guard(current.getStepState() == ApprovalStepState.IN_PROGRESS, "Current approval step is not in progress.");
@@ -486,12 +489,14 @@ public class ApprovalInstanceServiceImpl implements ApprovalInstanceService {
         approvalInstanceRepository.save(instance);
     }
 
-    private ApprovalInstance requireActionableUnderReview(FormSubmissionActionRequest request) {
+    private record ActionableInstance(ApprovalInstance instance, Document formSubmission) {}
+
+    private ActionableInstance requireActionableUnderReview(FormSubmissionActionRequest request) {
         ApprovalInstance instance = getActiveByFormSubmission(request.getSubmissionId(), request.getCollectionName());
         guard(instance.getApprovalSteps() != null && !instance.getApprovalSteps().isEmpty(), "Approval instance has no approval steps.");
         Document formSubmission = formSubmissionStateUpdater.getLatestFormSubmission(instance.getFormSubmissionId(), instance.getFormSubmissionCollectionName());
         requireFormSubmissionState(formSubmission, "Form submission must be under review for this approval action.", FormSubmissionState.UNDER_REVIEW);
-        return instance;
+        return new ActionableInstance(instance, formSubmission);
     }
 
     private ApprovalInstanceStep currentStep(ApprovalInstance instance) {
@@ -874,16 +879,8 @@ public class ApprovalInstanceServiceImpl implements ApprovalInstanceService {
     }
 
     private void requireFormSubmissionState(Document formSubmission, String message, FormSubmissionState... allowedStates) {
-        FormSubmissionState state = resolveFormSubmissionState(formSubmission);
+        FormSubmissionState state = approvalModelResolver.resolveLifecycleState(formSubmission);
         guard(List.of(allowedStates).contains(state), message);
-    }
-
-    private FormSubmissionState resolveFormSubmissionState(Document formSubmission) {
-        String state = formSubmission.getString("state");
-        if (state != null && !state.isBlank()) {
-            return FormSubmissionState.fromValue(state);
-        }
-        return FormSubmissionState.ARCHIVED;
     }
 
     private void incrementVersion(ApprovalInstance instance) {
@@ -923,7 +920,7 @@ public class ApprovalInstanceServiceImpl implements ApprovalInstanceService {
         if (snapshot.getFormTemplateId() == null) {
             snapshot.setFormTemplateId(asLong(instance.getFormTemplateId()));
         }
-        snapshot.setFormSubmissionState(resolveFormSubmissionState(formSubmission).dbValue());
+        snapshot.setFormSubmissionState(approvalModelResolver.resolveLifecycleState(formSubmission).dbValue());
         snapshot.setFormSubmissionVersion(formSubmissionVersion(formSubmission));
         snapshot.setVersionGroupId(asString(formSubmission.get("version_group_id")));
         snapshot.setCreatedAt(dateValue(formSubmission.get("created_at")));
