@@ -2,6 +2,28 @@ spring:
   profiles:
     active: dev
 
+  application:
+    name: mes-qc-service
+
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: false
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+        transaction.jta.platform: org.hibernate.engine.transaction.jta.platform.internal.NoJtaPlatform
+
+  datasource:
+    hikari:
+      minimum-idle: 10          # Minimum number of idle connections in the pool
+      maximum-pool-size: 20     # Maximum number of connections (active + idle)
+      idle-timeout: 30000       # 30 seconds - Time a connection can remain idle before being closed
+      max-lifetime: 1800000      # 30 minutes - Maximum lifetime of a connection
+      leak-detection-threshold: 60000  # 60 seconds - Time a connection can be borrowed before flagged as leaked
+      connection-timeout: 45000 # 45 seconds - Time to wait for a new connection before timing out
+
   mail:
     host: smtp.gmail.com
     port: 587
@@ -16,15 +38,10 @@ spring:
             enable: true
             required: true
 
-  datasource:
-    hikari:
-      minimum-idle: 10
-      maximum-pool-size: 20
-      idle-timeout: 30000
-      max-lifetime: 600000
-
 server:
   port: 8090
+  servlet:
+    context-path: /api/qc
 
   tomcat:
     threads:
@@ -45,10 +62,17 @@ management:
   endpoints:
     web:
       exposure:
-        include: health, info
+        include: health, info, metrics
   endpoint:
     health:
       show-details: always
+    metrics:
+      enabled: true
+
+  metrics:
+    export:
+      defaults:
+        enabled: true
 
 qc:
   snapshot:

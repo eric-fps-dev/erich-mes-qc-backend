@@ -22,16 +22,22 @@ public class MongoConnectionCheck implements CommandLineRunner {
     @Value("${spring.data.mongodb.uri}")
     private String mongoUri;
 
+    @Value("${spring.data.mongodb.database}")
+    private String databaseName;
+
     @Override
     public void run(String... args) {
         try {
             mongoClient.listDatabaseNames().first();
-            System.out.println("➡️ MongoDB URI: " + mongoUri);
-            System.out.println("✅ MongoDB connection established.");
+            System.out.println("--------------------------------------------------");
+            System.out.println("➡️ MongoDB Server URI: " + mongoUri);
+            System.out.println("➡️ Target Database:    " + databaseName);
+            System.out.println("✅ MongoDB connection established successfully.");
+            System.out.println("--------------------------------------------------");
         } catch (Exception e) {
-            System.err.println("❌ Failed to connect to MongoDB: " + e.getMessage());
+            System.err.println("❌ Failed to connect to MongoDB at: " + mongoUri);
+            System.err.println("❌ Error Detail: " + e.getMessage());
             throw new RuntimeException("MongoDB connection check failed", e);
         }
     }
 }
-
