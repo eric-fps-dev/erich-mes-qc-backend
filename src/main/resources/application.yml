@@ -78,15 +78,3 @@ qc:
   snapshot:
     api:
       url: ${QC_SNAPSHOT_API_URL:http://localhost:8081}
-
-# File upload configuration
-file:
-  upload:
-    dir: ${FILE_UPLOAD_DIR:uploads}
-    base-url: ${FILE_UPLOAD_BASE_URL:}
-
-# Multipart file upload limits
-spring.servlet.multipart:
-  enabled: true
-  max-file-size: 50MB
-  max-request-size: 50MB
