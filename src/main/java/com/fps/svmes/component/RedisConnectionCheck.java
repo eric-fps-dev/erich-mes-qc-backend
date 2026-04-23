@@ -8,6 +8,7 @@
 package com.fps.svmes.component;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.data.redis.connection.RedisConnection;
@@ -16,6 +17,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.Objects;
 
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class RedisConnectionCheck implements CommandLineRunner {
@@ -29,8 +31,16 @@ public class RedisConnectionCheck implements CommandLineRunner {
 
     @Override
     public void run(String... args) {
-        RedisConnection connection = Objects.requireNonNull(redisTemplate.getConnectionFactory()).getConnection();
-        System.out.println("➡️ Redis host: " + redisHost + ":" + redisPort);
-        System.out.println("✅ Redis connect test:  PING - " + connection.ping());
+        try (RedisConnection connection = Objects.requireNonNull(redisTemplate.getConnectionFactory()).getConnection()) {
+
+            log.info("=====================================================");
+            log.info("➡️ Redis host: {}:{}", redisHost, redisPort);
+            log.info("✅ Redis connect test: PING - {}", connection.ping());
+            log.info("=====================================================");
+
+        } catch (Exception e) {
+            log.error("❌ Failed to connect to Redis: {}", e.getMessage());
+            throw new RuntimeException("Redis connection check failed", e);
+        }
     }
 }
