@@ -1,39 +1,74 @@
 spring:
   datasource:
-    url: jdbc:postgresql://10.10.60.212:5432/mes_prod
-    username: postgres
-    password: postgres
+    url: jdbc:postgresql://${DB_HOST}:${DB_PORT:5432}/${DB_NAME}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
-
-  jpa:
-    hibernate:
-      ddl-auto: none
-    show-sql: false
-    open-in-view: false
-    properties:
-      hibernate:
-        format_sql: true
-        transaction.jta.platform: org.hibernate.engine.transaction.jta.platform.internal.NoJtaPlatform
 
   data:
     mongodb:
-      uri: mongodb://admin:snow123456@10.10.60.212:27017/dev-mes-qc?authSource=admin
-      database: dev-mes-qc
+      uri: {MONGO_URI}
+      database: ${MONGO_DB}
+
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT}
+      ssl:
+        enabled: true
+      timeout: 5000ms
+      lettuce:
+        pool:
+          max-active: 16
+          max-idle: 8
+          min-idle: 2
+          max-wait: 3000ms
+          time-between-eviction-runs: 30000ms
 
   security:
-    user:
-      name: fps-control
-      password: fpscontrols123
+    oauth2:
+      resource-server:
+        jwt:
+          issuer-uri: https://cognito-idp.${AWS_REGION}.amazonaws.com/${COGNITO_USER_POOL_ID}
 
-feign:
-  client:
-    config:
-      s3-adapter-service:
-        url: http://s3-adapter-service:8083
-        connect-timeout: 5000
-        read-timeout: 5000
+    user:
+      name: ${SPRING_SECURITY_USER}
+      password: ${SPRING_SECURITY_PASSWORD}
+
+    jackson:
+      serialization:
+        write-dates-as-timestamps: false
+
+aws:
+  sns:
+    region: ${AWS_REGION}
+    sms-type: Transactional
+    access-key: ${AWS_ACCESS_KEY}
+    secret-key: ${AWS_SECRET_KEY}
+  cognito:
+    region: ${AWS_REGION}
+    access-key: ${AWS_ACCESS_KEY}
+    secret-key: ${AWS_SECRET_KEY}
+    domain: ${COGNITO_DOMAIN}
+    user-pool-id: ${COGNITO_USER_POOL_ID}
+    client-id: ${COGNITO_CLIENT_ID}
+    client-secret: ${COGNITO_CLIENT_SECRET}
+    jwk-url: https://cognito-idp.${AWS_REGION}.amazonaws.com/${COGNITO_USER_POOL_ID}/.well-known/jwks.json
+    issuer-url: https://cognito-idp.${AWS_REGION}.amazonaws.com/${COGNITO_USER_POOL_ID}
+    audience: ${COGNITO_CLIENT_ID}
+
+jwt:
+  secret: ${JWT_SECRET}
+  access_token:
+    expiration: 86400000
+  refresh_token:
+    expiration: 604800000
+
+cors:
+  allowed-origins:
+    - ${CORS_ALLOWED_ORIGINS}
+  max-age: 3600
 
 qc:
   snapshot:
     api:
-      url: ${QC_SNAPSHOT_API_URL:http://localhost:8081}
+      url: ${QC_SNAPSHOT_API_URL}

@@ -9,10 +9,12 @@ package com.fps.svmes.component;
 
 import com.mongodb.client.MongoClient;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
 
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class MongoConnectionCheck implements CommandLineRunner {
@@ -22,16 +24,22 @@ public class MongoConnectionCheck implements CommandLineRunner {
     @Value("${spring.data.mongodb.uri}")
     private String mongoUri;
 
+    @Value("${spring.data.mongodb.database}")
+    private String mongoDb;
+
     @Override
     public void run(String... args) {
         try {
-            mongoClient.listDatabaseNames().first();
-            System.out.println("➡️ MongoDB URI: " + mongoUri);
-            System.out.println("✅ MongoDB connection established.");
+            mongoClient.getDatabase(mongoDb).listCollectionNames().first();
+
+            log.info("=====================================================");
+            log.info("➡️ MongoDB URI: {}", mongoUri);
+            log.info("➡️ MongoDB Database: {}", mongoDb);
+            log.info("✅ MongoDB connection established.");
+            log.info("=====================================================");
         } catch (Exception e) {
-            System.err.println("❌ Failed to connect to MongoDB: " + e.getMessage());
+            log.error("❌ Failed to connect to MongoDB: {}", e.getMessage());
             throw new RuntimeException("MongoDB connection check failed", e);
         }
     }
 }
-
