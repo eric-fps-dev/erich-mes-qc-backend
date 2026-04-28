@@ -4,6 +4,10 @@ FROM azul/zulu-openjdk:21
 # Set the working directory
 WORKDIR /app
 
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
 EXPOSE 8090
 
 # Accept an argument to set the active profile
