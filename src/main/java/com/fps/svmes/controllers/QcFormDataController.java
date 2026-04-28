@@ -49,6 +49,9 @@ public class QcFormDataController {
     @Autowired
     private QcSnapshotSubmissionService qcSnapshotSubmissionService;
 
+    @Autowired
+    private FormNotificationConfigService formNotificationConfigService;
+
     @PostMapping("/insert-form/{userId}/{collectionName}")
     public ResponseEntity<?> insertFormData(
             @PathVariable String collectionName,
@@ -117,6 +120,15 @@ public class QcFormDataController {
 
             // Evaluate control limits and trigger alerts if needed
             controlLimitEvaluationService.evaluateAndTriggerAlerts(formTemplateId, userId, formData, insertedDocument.getObjectId("_id").toString());
+
+            // Send notification emails to responsible persons (failure must not break submission)
+            try {
+                formNotificationConfigService.triggerSubmissionNotification(
+                        formTemplateId, userId, formData, exceededInfoMap,
+                        insertedDocument.getObjectId("_id").toString());
+            } catch (Exception notifEx) {
+                log.warn("Notification trigger failed for formTemplateId={}: {}", formTemplateId, notifEx.getMessage());
+            }
 
             // Prepare response
             Map<String, Object> response = new HashMap<>();
