@@ -24,6 +24,14 @@ spring:
           max-wait: 3000ms
           time-between-eviction-runs: 30000ms
 
+  rabbitmq:
+    host: ${RABBITMQ_HOST}
+    port: ${RABBITMQ_PORT}
+    username: ${RABBITMQ_USERNAME}
+    password: ${RABBITMQ_PASSWORD}
+    ssl:
+      enabled: true
+
   security:
     oauth2:
       resource-server:
