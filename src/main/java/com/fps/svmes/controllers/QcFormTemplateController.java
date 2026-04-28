@@ -3,6 +3,7 @@ package com.fps.svmes.controllers;
 
 import com.fps.svmes.dto.dtos.qcForm.QcFormTemplateDTO;
 import com.fps.svmes.dto.dtos.qcForm.QcFormTemplateEditLogDTO;
+import com.fps.svmes.dto.requests.DuplicateFormRequest;
 import com.fps.svmes.dto.requests.TemplateFormRequest;
 import com.fps.svmes.dto.responses.ResponseResult;
 import com.fps.svmes.models.sql.qcForm.QcFormTemplateEditLog;
@@ -171,6 +172,22 @@ public class QcFormTemplateController {
         } catch (Exception e) {
             log.error("Error updating template", e);
             return ResponseEntity.status(500).body("Error: " + e.getMessage());
+        }
+    }
+
+    @PostMapping("/{id}/duplicate")
+    @Operation(summary = "Duplicate a QC form template",
+            description = "Creates a copy of the template and places the new node in the same parent folder.")
+    public ResponseResult<Map<String, Object>> duplicateTemplate(
+            @PathVariable Long id,
+            @RequestBody DuplicateFormRequest request) {
+        try {
+            Map<String, Object> result = service.duplicateTemplate(id, request.getSourceNodeId(), request.getRequestedBy());
+            logger.info("Template {} duplicated, new id: {}", id, result.get("id"));
+            return ResponseResult.success(result);
+        } catch (Exception e) {
+            logger.error("Error duplicating template with ID: {}", id, e);
+            return ResponseResult.fail("Error duplicating template", e);
         }
     }
 

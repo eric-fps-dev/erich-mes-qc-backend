@@ -7,6 +7,7 @@ import com.fps.svmes.dto.dtos.qcForm.QcFormTemplateDTO;
 import com.fps.svmes.dto.dtos.qcForm.QcFormTemplateEditLogDTO;
 
 import java.util.List;
+import java.util.Map;
 
 public interface QcFormTemplateService {
     List<QcFormTemplateDTO> getAllActiveTemplates();
@@ -22,4 +23,6 @@ public interface QcFormTemplateService {
     QcFormTemplateDTO updateTemplateWithNodeSync(Long id, QcFormTemplateDTO dto);
     List<QcFormTemplateEditLogDTO> getEditLog(Long templateId);
     List<java.util.Map<String, Object>> getTemplateFields(Long templateId);
+
+    Map<String, Object> duplicateTemplate(Long templateId, String sourceNodeId, Integer requestedBy);
 }
