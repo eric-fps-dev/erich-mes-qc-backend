@@ -18,4 +18,5 @@ public class ApprovalInstanceFilterSnapshot {
     private List<Long> relatedBatchIds;
     private Long relatedTeamId;
     private Long relatedShiftId;
+    private Boolean isAlarmTriggered;
 }

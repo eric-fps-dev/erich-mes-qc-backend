@@ -56,14 +56,9 @@ public interface ApprovalInstanceService {
     void forward(FormSubmissionActionRequest request);
 
     /**
-     * Rejects the current review and resets all approval steps.
+     * Requests correction and moves the form submission to pending revision.
      */
-    void rejectFullReset(FormSubmissionActionRequest request);
-
-    /**
-     * Rejects the current review and rolls the workflow back one step.
-     */
-    void rejectPartialReset(FormSubmissionActionRequest request);
+    void requestCorrection(FormSubmissionActionRequest request);
 
     /**
      * Rejects the current review and voids the approval instance.

@@ -37,20 +37,23 @@ public class FormSubmissionController {
 
     @PostMapping("/insert-form/{userId}/{collectionName}")
     @Operation(
-            summary = "Create draft form submission",
-            description = "Creates a draft form submission in the dynamic Mongo collection, initializes version to 1, and creates the approval instance when an approval template is configured."
+            summary = "Create form submission",
+            description = "Creates a form submission in the dynamic Mongo collection, initializes version to 1, and creates the corresponding approval instance. "
+                    + "When the form template has no approval template, the form is auto-archived. "
+                    + "When submitForApproval=true and the form has approval steps, the form is also submitted for approval in the same call."
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Draft form submission created successfully"),
+            @ApiResponse(responseCode = "200", description = "Form submission created successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid collection name, form template, or form data"),
             @ApiResponse(responseCode = "500", description = "Unexpected error inserting form data")
     })
     public ResponseEntity<ResponseResult<Map<String, Object>>> insertFormData(
             @PathVariable String collectionName,
             @PathVariable Long userId,
+            @RequestParam(name = "submitForApproval", defaultValue = "false") boolean submitForApproval,
             @RequestBody Map<String, Object> formData) {
         try {
-            return ResponseResult.of(qcFormDataService.insertFormData(collectionName, userId, formData), ResponseStatus.SUCCESS);
+            return ResponseResult.of(qcFormDataService.insertFormData(collectionName, userId, formData, submitForApproval), ResponseStatus.SUCCESS);
         } catch (IllegalArgumentException e) {
             return ResponseResult.fail(e.getMessage(), ResponseStatus.BAD_REQUEST, e);
         } catch (Exception e) {
@@ -63,12 +66,12 @@ public class FormSubmissionController {
     @Operation(
             summary = "Edit a form submission",
             description = "Creates a new version of an existing draft or pending revision form submission while preserving version history. "
-                    + "Requires parentId and templateId. Optional previous_record_state accepts 'void' or 'archived' and defaults to 'void'. "
+                    + "Requires parentId and templateId. Optional previousRecordState accepts 'void' or 'archived' and defaults to 'void'. "
                     + "Archived old versions are kept for history and excluded from normal form-submission list results."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Form submission version created successfully"),
-            @ApiResponse(responseCode = "400", description = "Invalid previous_record_state value"),
+            @ApiResponse(responseCode = "400", description = "Invalid previousRecordState value"),
             @ApiResponse(responseCode = "404", description = "Original form submission was not found"),
             @ApiResponse(responseCode = "409", description = "Form submission cannot be edited in its current state"),
             @ApiResponse(responseCode = "500", description = "Unexpected error editing form data")
@@ -78,7 +81,7 @@ public class FormSubmissionController {
             @PathVariable Long userId,
             @RequestParam("parentId") String parentSubmissionId,
             @RequestParam("templateId") Long formTemplateId,
-            @RequestParam(name = "previous_record_state", defaultValue = "void") String previousRecordState,
+            @RequestParam(name = "previousRecordState", defaultValue = "void") String previousRecordState,
             @RequestBody Map<String, Object> updatedData) {
         try {
             return ResponseResult.of(
@@ -238,13 +241,13 @@ public class FormSubmissionController {
     private FormSubmissionState parsePreviousRecordState(String previousRecordState) {
         FormSubmissionState state = FormSubmissionState.fromValue(previousRecordState);
         if (!state.equals(FormSubmissionState.VOID) && !state.equals(FormSubmissionState.ARCHIVED)) {
-            throw new IllegalArgumentException("previous_record_state must be either 'void' or 'archived'.");
+            throw new IllegalArgumentException("previousRecordState must be either 'void' or 'archived'.");
         }
         return state;
     }
 
     private boolean isBadEditRequest(IllegalArgumentException e) {
         String message = e.getMessage();
-        return message != null && (message.startsWith("previous_record_state") || message.startsWith("Unknown form submission state"));
+        return message != null && (message.startsWith("previousRecordState") || message.startsWith("Unknown form submission state"));
     }
 }

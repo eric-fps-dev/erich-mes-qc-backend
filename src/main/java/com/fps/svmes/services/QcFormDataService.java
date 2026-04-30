@@ -17,9 +17,12 @@ import java.util.Map;
  */
 public interface QcFormDataService {
     /**
-     * Inserts a draft form submission and creates the corresponding approval instance.
+     * Inserts a form submission and creates the corresponding approval instance. When the form
+     * template has no approval template configured, the form is auto-archived with an empty-step
+     * approval instance. When {@code submitForApproval} is true and the instance has approval
+     * steps, the form is also moved into the approval workflow in the same call.
      */
-    Map<String, Object> insertFormData(String collectionName, Long userId, Map<String, Object> formData);
+    Map<String, Object> insertFormData(String collectionName, Long userId, Map<String, Object> formData, boolean submitForApproval);
 
     /**
      * Creates a new version of an existing draft or pending-revision form submission and
@@ -54,14 +57,9 @@ public interface QcFormDataService {
     void forward(FormSubmissionActionRequest request);
 
     /**
-     * Rejects a form submission and resets the approval workflow from the first step.
+     * Requests correction for a form submission and moves it to pending revision.
      */
-    void rejectFullRedo(FormSubmissionActionRequest request);
-
-    /**
-     * Rejects a form submission and rolls the approval workflow back one step.
-     */
-    void rejectPartialRedo(FormSubmissionActionRequest request);
+    void requestCorrection(FormSubmissionActionRequest request);
 
     /**
      * Rejects a form submission and voids it.

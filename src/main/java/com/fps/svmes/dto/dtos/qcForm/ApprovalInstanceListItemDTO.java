@@ -30,5 +30,6 @@ public class ApprovalInstanceListItemDTO {
     private Object relatedBatchIds;
     private Object relatedTeamId;
     private Object relatedShiftId;
+    private Boolean isAlarmTriggered;
     private Map<String, Object> formData;
 }

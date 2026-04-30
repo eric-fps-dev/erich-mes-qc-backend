@@ -8,7 +8,7 @@ import lombok.Data;
 
 @Data
 @Schema(
-        description = "Request body for form-submission workflow actions such as submit, recall, approve, forward, reject, and void.",
+        description = "Request body for form-submission workflow actions such as submit, recall, approve, forward, request correction, reject, and void.",
         requiredProperties = {
                 "submissionId",
                 "collectionName",
@@ -61,6 +61,12 @@ public class FormSubmissionActionRequest {
 
     @Schema(description = "Optional action comment stored in the approval action log.", example = "approve from role id 6")
     private String comment;
+
+    @Schema(
+            description = "Optional resume step index used only by the request-correction action. Must be between 0 and the current step index when provided.",
+            example = "0"
+    )
+    private Integer resumedStepIndex;
 
     // Do not need later
     @Schema(description = "Legacy helper flag retained for compatibility.", example = "false")

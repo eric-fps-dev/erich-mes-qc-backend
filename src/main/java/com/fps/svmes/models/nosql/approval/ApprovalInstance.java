@@ -40,6 +40,9 @@ public class ApprovalInstance extends BaseInstant {
     @Field("versionNumber")
     private Integer versionNumber;
 
+    @Field("isAlarmTriggered")
+    private Boolean isAlarmTriggered;
+
     @Field("filterSnapshot")
     private ApprovalInstanceFilterSnapshot filterSnapshot;
 }

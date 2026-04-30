@@ -24,4 +24,5 @@ public class ApprovalInstanceQueryRequest {
     private String createdAtStart;
     private String createdAtEnd;
     private String formSubmissionState;
+    private Boolean isAlarmTriggered;
 }

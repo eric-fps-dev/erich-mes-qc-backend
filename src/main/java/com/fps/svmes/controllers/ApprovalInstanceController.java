@@ -67,7 +67,8 @@ public class ApprovalInstanceController {
             @RequestParam(name = "current_required_role_id", required = false) String currentRequiredRoleId,
             @RequestParam(name = "created_at_start", required = false) String createdAtStart,
             @RequestParam(name = "created_at_end", required = false) String createdAtEnd,
-            @RequestParam(name = "form_submission_state", required = false) String formSubmissionState
+            @RequestParam(name = "form_submission_state", required = false) String formSubmissionState,
+            @RequestParam(name = "is_alarm_triggered", required = false) Boolean isAlarmTriggered
     ) {
         try {
             ApprovalInstanceQueryRequest request = new ApprovalInstanceQueryRequest();
@@ -90,6 +91,7 @@ public class ApprovalInstanceController {
             request.setCreatedAtStart(createdAtStart);
             request.setCreatedAtEnd(createdAtEnd);
             request.setFormSubmissionState(formSubmissionState);
+            request.setIsAlarmTriggered(isAlarmTriggered);
             return ResponseResult.of(qcFormDataService.getApprovalInstances(request), ResponseStatus.SUCCESS);
         } catch (IllegalArgumentException e) {
             return ResponseResult.fail(e.getMessage(), ResponseStatus.BAD_REQUEST, e);
@@ -211,47 +213,25 @@ public class ApprovalInstanceController {
         }
     }
 
-    @PostMapping("/approval/reject-full-redo")
+    @PostMapping("/approval/request-correction")
     @Operation(
-            summary = "Reject for full redo",
-            description = "Rejects the current approval step, resets all approval steps, sets currentStepSequence to 0, and moves the form submission to pending revision."
+            summary = "Request correction",
+            description = "Requests correction on the current approval step, moves the form submission to pending revision, and can optionally resume from an earlier or current step index."
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Form submission rejected for full redo"),
+            @ApiResponse(responseCode = "200", description = "Correction requested successfully"),
             @ApiResponse(responseCode = "409", description = "Invalid approval state or stale submitted versions"),
-            @ApiResponse(responseCode = "500", description = "Unexpected error rejecting form submission")
+            @ApiResponse(responseCode = "500", description = "Unexpected error requesting correction")
     })
-    public ResponseEntity<ResponseResult<String>> rejectFullRedo(@Valid @RequestBody FormSubmissionActionRequest request) {
+    public ResponseEntity<ResponseResult<String>> requestCorrection(@Valid @RequestBody FormSubmissionActionRequest request) {
         try {
-            qcFormDataService.rejectFullRedo(request);
-            return ResponseResult.of("Form submission rejected for full redo", ResponseStatus.SUCCESS);
+            qcFormDataService.requestCorrection(request);
+            return ResponseResult.of("Correction requested successfully", ResponseStatus.SUCCESS);
         } catch (IllegalStateException | ApprovalInstanceException e) {
             return ResponseResult.fail(e.getMessage(), ResponseStatus.CONFLICT, e);
         } catch (Exception e) {
-            log.error("Error rejecting form submission", e);
-            return ResponseResult.fail("Error rejecting form submission: " + e.getMessage(), ResponseStatus.INTERNAL_SERVER_ERROR, e);
-        }
-    }
-
-    @PostMapping("/approval/reject-partial-redo")
-    @Operation(
-            summary = "Reject for partial redo",
-            description = "Rejects the current approval step, resets the current and previous steps, moves currentStepSequence back one step, and moves the form submission to pending revision."
-    )
-    @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Form submission rejected for partial redo"),
-            @ApiResponse(responseCode = "409", description = "Current step cannot be partially reset, state is invalid, or submitted versions are stale"),
-            @ApiResponse(responseCode = "500", description = "Unexpected error rejecting form submission")
-    })
-    public ResponseEntity<ResponseResult<String>> rejectPartialRedo(@Valid @RequestBody FormSubmissionActionRequest request) {
-        try {
-            qcFormDataService.rejectPartialRedo(request);
-            return ResponseResult.of("Form submission rejected for partial redo", ResponseStatus.SUCCESS);
-        } catch (IllegalStateException | ApprovalInstanceException e) {
-            return ResponseResult.fail(e.getMessage(), ResponseStatus.CONFLICT, e);
-        } catch (Exception e) {
-            log.error("Error rejecting form submission", e);
-            return ResponseResult.fail("Error rejecting form submission: " + e.getMessage(), ResponseStatus.INTERNAL_SERVER_ERROR, e);
+            log.error("Error requesting correction", e);
+            return ResponseResult.fail("Error requesting correction: " + e.getMessage(), ResponseStatus.INTERNAL_SERVER_ERROR, e);
         }
     }
 
