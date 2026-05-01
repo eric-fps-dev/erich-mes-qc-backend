@@ -112,7 +112,9 @@ public class FormNotificationConfigServiceImpl implements FormNotificationConfig
             if (opt.isEmpty()) return;
             FormNotificationConfig config = opt.get();
 
-            if ("on_alert".equals(config.getTriggerType()) && (exceededInfo == null || exceededInfo.isEmpty())) {
+            boolean hasAlerts = hasActualAlerts(exceededInfo);
+
+            if ("on_alert".equals(config.getTriggerType()) && !hasAlerts) {
                 log.debug("Skipping notification for formTemplateId={}: on_alert trigger but no exceeded fields", formTemplateId);
                 return;
             }
@@ -133,7 +135,6 @@ public class FormNotificationConfigServiceImpl implements FormNotificationConfig
                 formName = "Form #" + formTemplateId;
             }
 
-            boolean hasAlerts = exceededInfo != null && !exceededInfo.isEmpty();
             String subject = hasAlerts
                     ? "[MES QC ⚠] " + formName + " — Submission with exceeded fields"
                     : "[MES QC] " + formName + " — New submission";
@@ -164,13 +165,14 @@ public class FormNotificationConfigServiceImpl implements FormNotificationConfig
                                    Map<String, ExceededFieldInfoDTO> exceededInfo,
                                    String formTemplateJson) {
         String timestamp = OffsetDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss xxx"));
+        boolean hasAlerts = hasActualAlerts(exceededInfo);
 
         return "<!DOCTYPE html><html><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width'></head>"
                 + "<body style='margin:0;padding:24px 16px;background:#f4f7f8;font-family:-apple-system,\"Helvetica Neue\",Arial,sans-serif;'>"
                 + "<table width='640' cellpadding='0' cellspacing='0' align='center' "
                 + "style='width:640px;max-width:100%;margin:0 auto;background:#fff;border-radius:6px;"
                 + "overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);'>"
-                + buildHeader(formName, submissionId, timestamp, !exceededInfo.isEmpty())
+                + buildHeader(formName, submissionId, timestamp, hasAlerts)
                 + buildContent(formData, exceededInfo, formTemplateJson)
                 + buildFooter(formData, submitterId, timestamp)
                 + "</table>"
@@ -181,8 +183,7 @@ public class FormNotificationConfigServiceImpl implements FormNotificationConfig
         String alertBadge = hasAlerts
                 ? "<span style='display:inline-block;background:#fef2f2;color:#dc2626;padding:2px 8px;"
                   + "border-radius:10px;font-size:11px;font-weight:600;margin-left:8px;vertical-align:middle;border:1px solid #fecaca;'>⚠ Alert</span>"
-                : "<span style='display:inline-block;background:#f0fdf4;color:#16a34a;padding:2px 8px;"
-                  + "border-radius:10px;font-size:11px;font-weight:600;margin-left:8px;vertical-align:middle;border:1px solid #bbf7d0;'>✓ Normal</span>";
+                : "";
 
         return "<tr><td style='background:#ffffff;padding:24px 32px;border-bottom:1px solid #f0f4f6;'>"
                 + "<table width='100%' cellpadding='0' cellspacing='0'><tr>"
@@ -468,6 +469,16 @@ public class FormNotificationConfigServiceImpl implements FormNotificationConfig
             if (labels != null && !labels.isEmpty()) return "Valid options: " + String.join(", ", labels);
         }
         return null;
+    }
+
+    private boolean hasActualAlerts(Map<String, ExceededFieldInfoDTO> exceededInfo) {
+        if (exceededInfo == null || exceededInfo.isEmpty()) {
+            return false;
+        }
+        return exceededInfo.values().stream()
+                .filter(Objects::nonNull)
+                .map(ExceededFieldInfoDTO::getResult)
+                .anyMatch(result -> result != null && !result.isBlank());
     }
 
     private static final Set<String> IMAGE_EXTS = Set.of(

@@ -30,7 +30,7 @@ public class WeeklyReportScheduler {
     private final EmailService emailService;
     private final RestTemplate restTemplate;
 
-    @Value("${qc.snapshot.api.url:http://localhost:8081}")
+    @Value("${qc.snapshot.api.url}")
     private String qcSnapshotApiUrl;
 
     /**
