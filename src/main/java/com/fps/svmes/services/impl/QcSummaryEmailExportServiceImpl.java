@@ -68,7 +68,7 @@ public class QcSummaryEmailExportServiceImpl implements QcSummaryEmailExportServ
     private final SuggestedBatchRepository suggestedBatchRepository;
     private final QcFormTemplateRepository qcFormTemplateRepository;
 
-    @Value("${qc.snapshot.api.url:http://localhost:8081}")
+    @Value("${qc.snapshot.api.url}")
     private String qcSnapshotApiUrl;
 
     @Value("${spring.mail.username:noreply@example.com}")

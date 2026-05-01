@@ -36,4 +36,4 @@ feign:
 qc:
   snapshot:
     api:
-      url: ${QC_SNAPSHOT_API_URL:http://10.10.12.11:8010}
+      url: ${QC_SNAPSHOT_API_URL:http://10.10.12.11:8010/api/qc-snapshot}
