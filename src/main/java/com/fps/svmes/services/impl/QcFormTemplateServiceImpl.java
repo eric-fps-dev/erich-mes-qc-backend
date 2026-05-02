@@ -18,7 +18,9 @@ import org.modelmapper.ModelMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import com.fps.svmes.models.nosql.FormNode;
 import org.bson.Document;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -685,6 +687,48 @@ public class QcFormTemplateServiceImpl implements QcFormTemplateService {
             default:
                 return "other";
         }
+    }
+
+    @Override
+    public Map<String, Object> duplicateTemplate(Long templateId, String sourceNodeId, Integer requestedBy) {
+        QcFormTemplate original = qcFormTemplateRepository.findById(templateId)
+                .orElseThrow(() -> new RuntimeException("Template not found: " + templateId));
+
+        QcFormTemplateDTO dto = new QcFormTemplateDTO();
+        dto.setName("Copy of " + original.getName());
+        dto.setFormTemplateJson(original.getFormTemplateJson());
+        dto.setApprovalType(original.getApprovalType());
+        dto.setCreatedBy(requestedBy);
+        QcFormTemplateDTO newTemplate = createTemplate(dto);
+
+        FormNode newNode = new FormNode();
+        newNode.setLabel(newTemplate.getName());
+        newNode.setNodeType("document");
+        newNode.setQcFormTemplateId(newTemplate.getId());
+
+        String parentId = formNodeService.findParentNodeId(sourceNodeId).orElse(null);
+        if (parentId == null || "root".equals(parentId)) {
+            formNodeService.saveNode(newNode);
+        } else {
+            formNodeService.addChildNode(parentId, newNode);
+        }
+
+        LocalDate now = LocalDate.now();
+        String yearMonth = now.getYear() + String.format("%02d", now.getMonthValue());
+        String collectionName = "form_template_" + newTemplate.getId() + "_" + yearMonth;
+        mongoService.createCollection(collectionName);
+
+        extractAndStoreKeyLabelPairs(newTemplate);
+        createControlLimitSetting(newTemplate);
+
+        QcFormTemplateEditLog log = new QcFormTemplateEditLog();
+        log.setTemplateId(newTemplate.getId());
+        log.setEditedBy(requestedBy != null ? requestedBy.longValue() : 0L);
+        log.setEditedAt(OffsetDateTime.now());
+        log.setChangeSummary("Duplicated from template " + templateId);
+        editLogRepository.save(log);
+
+        return Map.of("id", newTemplate.getId());
     }
 
     private String findLabelInWidgetList(JsonNode widgetList, String fieldKey) {

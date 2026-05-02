@@ -17,6 +17,8 @@ public interface QcTaskSubmissionLogsService {
 
     byte[] exportDocumentsToExcel(List<Document> documents);
 
+    byte[] exportDocumentToExcel(Document document);
+
     byte[] exportDocumentToPdf(Document document);
 
     void deleteSubmissionLog(String submissionId, String collectionName);
