@@ -42,31 +42,6 @@ public interface QcFormDataService {
     void submitForApproval(FormSubmissionActionRequest request);
 
     /**
-     * Recalls an under-review form submission back to draft.
-     */
-    void recall(FormSubmissionActionRequest request);
-
-    /**
-     * Approves the current approval step for a form submission.
-     */
-    void approve(FormSubmissionActionRequest request);
-
-    /**
-     * Forwards the current approval step to the next step.
-     */
-    void forward(FormSubmissionActionRequest request);
-
-    /**
-     * Requests correction for a form submission and moves it to pending revision.
-     */
-    void requestCorrection(FormSubmissionActionRequest request);
-
-    /**
-     * Rejects a form submission and voids it.
-     */
-    void rejectDiscard(FormSubmissionActionRequest request);
-
-    /**
      * Edits the approval flow instance attached to a form submission.
      */
     Document editApprovalFlow(ApprovalFlowEditRequest request);

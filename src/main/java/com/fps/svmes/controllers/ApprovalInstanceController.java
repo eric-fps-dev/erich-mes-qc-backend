@@ -8,6 +8,7 @@ import com.fps.svmes.dto.requests.ApprovalFlowEditRequest;
 import com.fps.svmes.dto.requests.ApprovalInstanceQueryRequest;
 import com.fps.svmes.dto.requests.FormSubmissionActionRequest;
 import com.fps.svmes.exceptions.ApprovalInstanceException;
+import com.fps.svmes.services.ApprovalInstanceService;
 import com.fps.svmes.services.QcFormDataService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -35,6 +36,7 @@ import org.springframework.web.bind.annotation.*;
 public class ApprovalInstanceController {
 
     private final QcFormDataService qcFormDataService;
+    private final ApprovalInstanceService approvalInstanceService;
 
     @GetMapping("/approval-instances")
     @Operation(
@@ -181,7 +183,7 @@ public class ApprovalInstanceController {
     })
     public ResponseEntity<ResponseResult<String>> approve(@Valid @RequestBody FormSubmissionActionRequest request) {
         try {
-            qcFormDataService.approve(request);
+            approvalInstanceService.approve(request);
             return ResponseResult.of("Form submission approved successfully", ResponseStatus.SUCCESS);
         } catch (IllegalStateException | ApprovalInstanceException e) {
             return ResponseResult.fail(e.getMessage(), ResponseStatus.CONFLICT, e);
@@ -203,7 +205,7 @@ public class ApprovalInstanceController {
     })
     public ResponseEntity<ResponseResult<String>> forward(@Valid @RequestBody FormSubmissionActionRequest request) {
         try {
-            qcFormDataService.forward(request);
+            approvalInstanceService.forward(request);
             return ResponseResult.of("Form submission forwarded to next approval step", ResponseStatus.SUCCESS);
         } catch (IllegalStateException | ApprovalInstanceException e) {
             return ResponseResult.fail(e.getMessage(), ResponseStatus.CONFLICT, e);
@@ -225,7 +227,7 @@ public class ApprovalInstanceController {
     })
     public ResponseEntity<ResponseResult<String>> requestCorrection(@Valid @RequestBody FormSubmissionActionRequest request) {
         try {
-            qcFormDataService.requestCorrection(request);
+            approvalInstanceService.requestCorrection(request);
             return ResponseResult.of("Correction requested successfully", ResponseStatus.SUCCESS);
         } catch (IllegalStateException | ApprovalInstanceException e) {
             return ResponseResult.fail(e.getMessage(), ResponseStatus.CONFLICT, e);
@@ -247,7 +249,7 @@ public class ApprovalInstanceController {
     })
     public ResponseEntity<ResponseResult<String>> rejectDiscard(@Valid @RequestBody FormSubmissionActionRequest request) {
         try {
-            qcFormDataService.rejectDiscard(request);
+            approvalInstanceService.rejectDiscard(request);
             return ResponseResult.of("Form submission rejected and voided", ResponseStatus.SUCCESS);
         } catch (IllegalStateException | ApprovalInstanceException e) {
             return ResponseResult.fail(e.getMessage(), ResponseStatus.CONFLICT, e);

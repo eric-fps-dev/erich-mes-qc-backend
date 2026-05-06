@@ -242,31 +242,6 @@ public class QcFormDataServiceImpl implements QcFormDataService {
     }
 
     @Override
-    public void recall(FormSubmissionActionRequest request) {
-        approvalInstanceService.recall(request);
-    }
-
-    @Override
-    public void approve(FormSubmissionActionRequest request) {
-        approvalInstanceService.approve(request);
-    }
-
-    @Override
-    public void forward(FormSubmissionActionRequest request) {
-        approvalInstanceService.forward(request);
-    }
-
-    @Override
-    public void requestCorrection(FormSubmissionActionRequest request) {
-        approvalInstanceService.requestCorrection(request);
-    }
-
-    @Override
-    public void rejectDiscard(FormSubmissionActionRequest request) {
-        approvalInstanceService.rejectDiscard(request);
-    }
-
-    @Override
     public Document editApprovalFlow(ApprovalFlowEditRequest request) {
         return new Document("approvalInstance", approvalInstanceService.editApprovalFlow(request));
     }

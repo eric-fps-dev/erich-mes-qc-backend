@@ -5,6 +5,7 @@ import com.fps.shared.dto.responses.ResponseStatus;
 import com.fps.svmes.dto.requests.FormSubmissionActionRequest;
 import com.fps.svmes.enums.form.FormSubmissionState;
 import com.fps.svmes.exceptions.ApprovalInstanceException;
+import com.fps.svmes.services.ApprovalInstanceService;
 import com.fps.svmes.services.QcFormDataService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -30,10 +31,11 @@ import java.util.Map;
 @Slf4j
 @RequestMapping("/qc-form-data")
 @RequiredArgsConstructor
-@Tag(name = "Form Submission API", description = "Form submission lifecycle and state transitions")
-public class FormSubmissionController {
+@Tag(name = "QC Form Data API", description = "Form submission lifecycle and state transitions")
+public class QcFormDataController {
 
     private final QcFormDataService qcFormDataService;
+    private final ApprovalInstanceService approvalInstanceService;
 
     @PostMapping("/insert-form/{userId}/{collectionName}")
     @Operation(
@@ -204,7 +206,7 @@ public class FormSubmissionController {
     })
     public ResponseEntity<ResponseResult<String>> recall(@Valid @RequestBody FormSubmissionActionRequest request) {
         try {
-            qcFormDataService.recall(request);
+            approvalInstanceService.recall(request);
             return ResponseResult.of("Form submission recalled to draft", ResponseStatus.SUCCESS);
         } catch (IllegalStateException | ApprovalInstanceException e) {
             return ResponseResult.fail(e.getMessage(), ResponseStatus.CONFLICT, e);
