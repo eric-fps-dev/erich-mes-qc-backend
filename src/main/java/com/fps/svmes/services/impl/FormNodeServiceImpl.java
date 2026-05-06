@@ -336,6 +336,27 @@ public class FormNodeServiceImpl implements FormNodeService {
         }
     }
 
+    @Override
+    public Optional<String> findParentNodeId(String nodeId) {
+        List<FormNode> roots = repository.findAll();
+        for (FormNode root : roots) {
+            if (root.getId().equals(nodeId)) return Optional.of("root");
+            Optional<String> parent = findParentRecursively(root, nodeId);
+            if (parent.isPresent()) return parent;
+        }
+        return Optional.empty();
+    }
+
+    private Optional<String> findParentRecursively(FormNode current, String targetId) {
+        if (current.getChildren() == null) return Optional.empty();
+        for (FormNode child : current.getChildren()) {
+            if (child.getId().equals(targetId)) return Optional.of(current.getId());
+            Optional<String> result = findParentRecursively(child, targetId);
+            if (result.isPresent()) return result;
+        }
+        return Optional.empty();
+    }
+
     private boolean updateLabelRecursive(FormNode node, Long templateId, String newLabel) {
         boolean updated = false;
         if (templateId.equals(node.getQcFormTemplateId())) {

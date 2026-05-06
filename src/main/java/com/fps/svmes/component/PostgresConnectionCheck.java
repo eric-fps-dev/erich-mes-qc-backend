@@ -8,6 +8,7 @@
 package com.fps.svmes.component;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
 
@@ -15,6 +16,7 @@ import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.SQLException;
 
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class PostgresConnectionCheck implements CommandLineRunner {
@@ -22,13 +24,17 @@ public class PostgresConnectionCheck implements CommandLineRunner {
     private final DataSource dataSource;
 
     @Override
-    public void run(String... args) throws Exception {
+    public void run(String... args) {
         try (Connection conn = dataSource.getConnection()) {
-            String dbHost = conn.getMetaData().getURL();
-            System.out.println("➡️ PostgreSQL is up. host: " + dbHost);
+            String dbUrl = conn.getMetaData().getURL();
+
+            log.info("=====================================================");
+            log.info("➡️ Postgres URL: {}", dbUrl);
+            log.info("✅ Postgres connection established.");
+            log.info("=====================================================");
         } catch (SQLException e) {
-            System.err.println("❌ Failed to connect to PostgreSQL: " + e.getMessage());
-            throw e; // optionally fail the app startup
+            log.error("❌ Failed to connect to PostgreSQL: {}", e.getMessage());
+            throw new RuntimeException("PostgreSQL connection check failed", e);
         }
     }
 

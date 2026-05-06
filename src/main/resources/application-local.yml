@@ -71,4 +71,4 @@ cors:
 qc:
   snapshot:
     api:
-      url: ${QC_SNAPSHOT_API_URL:http://localhost:8010}
+      url: ${QC_SNAPSHOT_API_URL:http://localhost:8010/api/qc-snapshot}

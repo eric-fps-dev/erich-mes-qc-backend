@@ -77,7 +77,7 @@ management:
 qc:
   snapshot:
     api:
-      url: ${QC_SNAPSHOT_API_URL:http://localhost:8081}
+      url: ${QC_SNAPSHOT_API_URL:http://localhost:8081/api/qc-snapshot}
   legacy-migration:
     leader-role-id: ${LEGACY_MIGRATION_LEADER_ROLE_ID:6}
     supervisor-role-id: ${LEGACY_MIGRATION_SUPERVISOR_ROLE_ID:7}
@@ -85,14 +85,3 @@ qc:
     flow3-approval-template-id: ${LEGACY_MIGRATION_FLOW3_TEMPLATE_ID:69e7c32db26b380d82fae8e9}
     flow4-approval-template-id: ${LEGACY_MIGRATION_FLOW4_TEMPLATE_ID:68e699a946d9997100ff644a}
 
-# File upload configuration
-file:
-  upload:
-    dir: ${FILE_UPLOAD_DIR:uploads}
-    base-url: ${FILE_UPLOAD_BASE_URL:}
-
-# Multipart file upload limits
-spring.servlet.multipart:
-  enabled: true
-  max-file-size: 50MB
-  max-request-size: 50MB

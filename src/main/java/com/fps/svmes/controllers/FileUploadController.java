@@ -26,6 +26,7 @@ import java.util.UUID;
 @RestController
 @Slf4j
 @RequestMapping("/file-upload")
+@Deprecated
 @Tag(name = "File Upload API", description = "API for file uploads used by form designer")
 public class FileUploadController {
 
@@ -49,6 +50,7 @@ public class FileUploadController {
         }
     }
 
+    @DeleteMapping
     @PostMapping("/upload")
     @Operation(summary = "Upload a file", description = "Upload a file and return the file URL")
     public ResponseEntity<?> uploadFile(@RequestParam("file") MultipartFile file) {
@@ -92,6 +94,7 @@ public class FileUploadController {
         }
     }
 
+    @Deprecated
     @GetMapping("/files/{filename:.+}")
     @Operation(summary = "Download/view a file", description = "Retrieve an uploaded file by filename")
     public ResponseEntity<Resource> getFile(@PathVariable String filename) {
@@ -132,6 +135,7 @@ public class FileUploadController {
         }
     }
 
+    @Deprecated
     @DeleteMapping("/files/{filename:.+}")
     @Operation(summary = "Delete a file", description = "Delete an uploaded file by filename")
     public ResponseEntity<?> deleteFile(@PathVariable String filename) {

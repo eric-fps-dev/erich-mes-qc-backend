@@ -17,6 +17,7 @@ import com.fps.svmes.enums.form.ApprovalModel;
 import com.fps.svmes.services.ApprovalInfoGeneratorService;
 import com.fps.svmes.services.ApprovalInstanceService;
 import com.fps.svmes.services.ControlLimitEvaluationService;
+import com.fps.svmes.services.FormNotificationConfigService;
 import com.fps.svmes.services.QcApprovalAssignmentService;
 import com.fps.svmes.services.QcFormDataService;
 import com.fps.svmes.services.QcFormTemplateService;
@@ -48,7 +49,6 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -66,6 +66,7 @@ public class QcFormDataServiceImpl implements QcFormDataService {
     private final QcSnapshotSubmissionService qcSnapshotSubmissionService;
     private final MongoFormTemplateUtils mongoUtils;
     private final ApprovalInstanceService approvalInstanceService;
+    private final FormNotificationConfigService formNotificationConfigService;
     private final FormSubmissionIndexManager formSubmissionIndexManager;
     private final SubmissionApprovalModelResolver approvalModelResolver;
 
@@ -131,6 +132,15 @@ public class QcFormDataServiceImpl implements QcFormDataService {
 
         List<String> warnings = new ArrayList<>();
         runPostInsertCompatibilityWork(submissionId, collectionName, formTemplateId, templateName, approvalType, userId, formData, warnings);
+
+        // Send notification emails to responsible persons (failure must not break submission)
+        try {
+            formNotificationConfigService.triggerSubmissionNotification(
+                    formTemplateId, userId, formData, exceededInfoMap,
+                    insertedDocument.getObjectId("_id").toString());
+        } catch (Exception notifEx) {
+            log.warn("Notification trigger failed for formTemplateId={}: {}", formTemplateId, notifEx.getMessage());
+        }
 
         Map<String, Object> response = new HashMap<>();
         response.put("object_id", submissionId);

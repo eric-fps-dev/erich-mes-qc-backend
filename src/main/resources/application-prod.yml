@@ -7,7 +7,7 @@ spring:
 
   data:
     mongodb:
-      uri: {MONGO_URI}
+      uri: ${MONGO_URI}
       database: ${MONGO_DB}
 
     redis:
@@ -23,6 +23,14 @@ spring:
           min-idle: 2
           max-wait: 3000ms
           time-between-eviction-runs: 30000ms
+
+  rabbitmq:
+    host: ${RABBITMQ_HOST}
+    port: ${RABBITMQ_PORT}
+    username: ${RABBITMQ_USERNAME}
+    password: ${RABBITMQ_PASSWORD}
+    ssl:
+      enabled: true
 
   security:
     oauth2:
@@ -55,14 +63,6 @@ aws:
     jwk-url: https://cognito-idp.${AWS_REGION}.amazonaws.com/${COGNITO_USER_POOL_ID}/.well-known/jwks.json
     issuer-url: https://cognito-idp.${AWS_REGION}.amazonaws.com/${COGNITO_USER_POOL_ID}
     audience: ${COGNITO_CLIENT_ID}
-
-feign:
-  client:
-    config:
-      s3-adapter-service:
-        url: ${S3_ADAPTER_URL:http://s3-adapter-service:8083}
-        connect-timeout: 5000
-        read-timeout: 5000
 
 jwt:
   secret: ${JWT_SECRET}

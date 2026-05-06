@@ -499,6 +499,37 @@ public class QcTaskSubmissionLogsServiceImpl implements QcTaskSubmissionLogsServ
     }
 
     @Override
+    public byte[] exportDocumentToExcel(Document document) {
+        try (Workbook workbook = new XSSFWorkbook();
+             ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
+            Sheet sheet = workbook.createSheet("QC Records");
+
+            Map<String, String> flatRow = flattenDocumentForExcel(document);
+            Row headerRow = sheet.createRow(0);
+            Row dataRow = sheet.createRow(1);
+
+            int cellNum = 0;
+            for (Map.Entry<String, String> entry : flatRow.entrySet()) {
+                Cell headerCell = headerRow.createCell(cellNum);
+                headerCell.setCellValue(entry.getKey());
+
+                Cell valueCell = dataRow.createCell(cellNum);
+                valueCell.setCellValue(entry.getValue());
+                cellNum++;
+            }
+
+            for (int i = 0; i < flatRow.size(); i++) {
+                sheet.autoSizeColumn(i);
+            }
+
+            workbook.write(outputStream);
+            return outputStream.toByteArray();
+        } catch (Exception e) {
+            throw new RuntimeException("Error exporting document to Excel: " + e.getMessage(), e);
+        }
+    }
+
+    @Override
     public byte[] exportDocumentToPdf(Document mongoDocument) {
         try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
             // Create a new PDF document (iText)
@@ -740,6 +771,144 @@ public class QcTaskSubmissionLogsServiceImpl implements QcTaskSubmissionLogsServ
         } catch (Exception e) {
             // Fallback: return the original UTC time if parsing fails
             return utcTime;
+        }
+    }
+
+    private Map<String, String> flattenDocumentForExcel(Document document) {
+        Map<String, String> flatRow = new LinkedHashMap<>();
+        Map<String, Object> groupedDetails = parseGroupedDetails(document);
+
+        for (Map.Entry<String, Object> categoryEntry : groupedDetails.entrySet()) {
+            if (!(categoryEntry.getValue() instanceof Map<?, ?> fields)) {
+                continue;
+            }
+
+            for (Map.Entry<?, ?> fieldEntry : fields.entrySet()) {
+                String key = String.valueOf(fieldEntry.getKey());
+                if (shouldSkipExcelField(key)) {
+                    continue;
+                }
+
+                flatRow.put(key, normalizeExcelValue(fieldEntry.getValue()));
+            }
+        }
+
+        Map<String, Object> uncategorized = asMap(groupedDetails.get("uncategorized"));
+        flatRow.put("Related Products", normalizeExcelValue(uncategorized.get("related_products")));
+        flatRow.put("Related Batches", normalizeExcelValue(uncategorized.get("related_batches")));
+        flatRow.put("QC Personnel", normalizeExcelValue(uncategorized.get("related_inspectors")));
+        flatRow.put("Belonging Shift", normalizeExcelValue(uncategorized.get("related_shifts")));
+        flatRow.put("Belonging Team", normalizeExcelValue(uncategorized.get("related_teams")));
+
+        flatRow.put("Submission ID", normalizeExcelValue(document.get("_id")));
+        flatRow.put("Submission Time", convertToLocalTime(Objects.toString(document.get("created_at"), "")));
+        flatRow.put("Submitter", resolveSubmitterName(document.get("created_by")));
+
+        return flatRow;
+    }
+
+    private Map<String, Object> parseGroupedDetails(Document document) {
+        Map<String, Object> groupedDetails = new LinkedHashMap<>();
+        Set<String> skipKeys = Set.of("_id", "created_at", "created_by", "submissionId");
+
+        for (Map.Entry<String, Object> entry : document.entrySet()) {
+            String key = entry.getKey();
+            Object value = entry.getValue();
+            if (skipKeys.contains(key)) {
+                continue;
+            }
+
+            if (value instanceof Map<?, ?>) {
+                groupedDetails.put(key, value);
+            } else {
+                Map<String, Object> uncategorized = asMap(groupedDetails.computeIfAbsent("uncategorized", ignored -> new LinkedHashMap<>()));
+                uncategorized.put(key, value);
+            }
+        }
+
+        return groupedDetails;
+    }
+
+    private Map<String, Object> asMap(Object value) {
+        if (value instanceof Map<?, ?> mapValue) {
+            Map<String, Object> result = new LinkedHashMap<>();
+            for (Map.Entry<?, ?> entry : mapValue.entrySet()) {
+                result.put(String.valueOf(entry.getKey()), entry.getValue());
+            }
+            return result;
+        }
+        return new LinkedHashMap<>();
+    }
+
+    private boolean shouldSkipExcelField(String key) {
+        return "e-signature".equals(key)
+                || "approval_info".equals(key)
+                || key.startsWith("related_")
+                || key.startsWith("qc_form_template")
+                || "version_group_id".equals(key)
+                || "version".equals(key)
+                || "exceeded_info".equals(key);
+    }
+
+    private String normalizeExcelValue(Object value) {
+        if (value == null) {
+            return "-";
+        }
+        if (value instanceof Collection<?> collection) {
+            if (collection.isEmpty()) {
+                return "-";
+            }
+            if (collection.stream().allMatch(this::isUrlLike)) {
+                if (collection.stream().anyMatch(this::isImageUrlLike)) {
+                    return "(See images in application)";
+                }
+                return "(See files in application)";
+            }
+            return collection.stream()
+                    .map(item -> item == null ? "-" : String.valueOf(item))
+                    .collect(Collectors.joining(", "));
+        }
+        String stringValue = String.valueOf(value);
+        return stringValue.isBlank() ? "-" : stringValue;
+    }
+
+    private boolean isUrlLike(Object value) {
+        if (!(value instanceof String stringValue)) {
+            return false;
+        }
+        return stringValue.startsWith("http://")
+                || stringValue.startsWith("https://")
+                || stringValue.contains("/files/");
+    }
+
+    private boolean isImageUrlLike(Object value) {
+        if (!(value instanceof String stringValue)) {
+            return false;
+        }
+        String lower = stringValue.toLowerCase(Locale.ROOT);
+        return lower.contains(".jpg")
+                || lower.contains(".jpeg")
+                || lower.contains(".png")
+                || lower.contains(".gif")
+                || lower.contains(".bmp")
+                || lower.contains(".webp")
+                || lower.contains(".svg")
+                || lower.contains(".ico")
+                || lower.contains(".tiff")
+                || lower.contains(".tif")
+                || lower.contains(".heic")
+                || lower.contains(".heif");
+    }
+
+    private String resolveSubmitterName(Object createdByValue) {
+        if (createdByValue == null) {
+            return "-";
+        }
+        try {
+            String name = userRepository.findNameById(Integer.parseInt(String.valueOf(createdByValue)));
+            return name == null || name.isBlank() ? "-" : name;
+        } catch (Exception e) {
+            return "-";
         }
     }
 

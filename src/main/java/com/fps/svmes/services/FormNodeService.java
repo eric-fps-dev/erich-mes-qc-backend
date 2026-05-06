@@ -16,4 +16,6 @@ public interface FormNodeService {
     boolean moveNode(String nodeId, String newParentId);
 
     void updateLabelByQcFormTemplateId(Long qcFormTemplateId, String newLabel);
+
+    Optional<String> findParentNodeId(String nodeId);
 }

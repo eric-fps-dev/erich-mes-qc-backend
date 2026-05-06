@@ -13,6 +13,13 @@ spring:
     redis:
       host: ${REDIS_HOST}
       port: ${REDIS_PORT}
+      password: ${REDIS_PASSWORD}
+
+  rabbitmq:
+    host: ${RABBITMQ_HOST}
+    port: ${RABBITMQ_PORT}
+    username: ${RABBITMQ_USERNAME}
+    password: ${RABBITMQ_PASSWORD}
 
   security:
     oauth2:
@@ -45,14 +52,6 @@ aws:
     jwk-url: https://cognito-idp.${AWS_REGION}.amazonaws.com/${COGNITO_USER_POOL_ID}/.well-known/jwks.json
     issuer-url: https://cognito-idp.${AWS_REGION}.amazonaws.com/${COGNITO_USER_POOL_ID}
     audience: ${COGNITO_CLIENT_ID}
-
-feign:
-  client:
-    config:
-      s3-adapter-service:
-        url: ${S3_ADAPTER_URL:http://s3-adapter-service:8083}
-        connect-timeout: 5000
-        read-timeout: 5000
 
 jwt:
   secret: ${JWT_SECRET}
