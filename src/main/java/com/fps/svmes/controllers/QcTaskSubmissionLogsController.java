@@ -135,6 +135,7 @@ public class QcTaskSubmissionLogsController {
         }
     }
 
+
     // Delete the submission log by submissionId and createdAt
     @DeleteMapping("/{submissionId}")
     @Operation(summary = "Delete a submission log by submissionId and createdAt")
@@ -149,6 +150,21 @@ public class QcTaskSubmissionLogsController {
             return ResponseEntity.ok("Submission log deleted successfully");
         } catch (Exception e) {
             return ResponseEntity.status(500).body("Error deleting submission log: " + e.getMessage());
+        }
+    }
+
+    @DeleteMapping("/soft/{submissionId}")
+    @Operation(summary = "Soft delete a submission log by submissionId and createdAt")
+    public ResponseEntity<?> softDeleteSubmissionLog(
+            @PathVariable String submissionId,
+            @RequestParam Long qcFormTemplateId,
+            @RequestParam String createdAt) {
+        try {
+            String collectionName = "form_template_" + qcFormTemplateId + "_" + createdAt.substring(0, 7).replace("-", "");
+            qcTaskSubmissionLogsService.voidSubmission(submissionId, collectionName);
+            return ResponseEntity.ok("Submission log voided successfully");
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("Error voiding submission log: " + e.getMessage());
         }
     }
 
