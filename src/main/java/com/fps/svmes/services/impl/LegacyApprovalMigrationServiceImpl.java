@@ -79,9 +79,8 @@ public class LegacyApprovalMigrationServiceImpl implements LegacyApprovalMigrati
                 continue;
             }
 
-            int offset = 0;
             while (true) {
-                List<Document> batch = fetchLegacyBatch(collection, offset, BATCH_SIZE);
+                List<Document> batch = fetchLegacyBatch(collection, BATCH_SIZE);
                 if (batch.isEmpty()) break;
 
                 for (Document doc : batch) {
@@ -89,7 +88,7 @@ public class LegacyApprovalMigrationServiceImpl implements LegacyApprovalMigrati
                     String submissionId = doc.getObjectId("_id").toString();
                     try {
                         MigrationOutcome outcome = migrateOne(doc, submissionId, collection, formTemplateId);
-                        if (outcome == MigrationOutcome.MIGRATED) totalMigrated++;
+                        if (outcome == MigrationOutcome.MIGRATED || outcome == MigrationOutcome.RECOVERED) totalMigrated++;
                         else totalSkipped++;
                     } catch (Exception e) {
                         totalFailed++;
@@ -99,7 +98,6 @@ public class LegacyApprovalMigrationServiceImpl implements LegacyApprovalMigrati
                 }
 
                 if (batch.size() < BATCH_SIZE) break;
-                offset += BATCH_SIZE;
             }
         }
 
@@ -111,14 +109,19 @@ public class LegacyApprovalMigrationServiceImpl implements LegacyApprovalMigrati
     // ── per-document migration ──────────────────────────────────────────────
 
     private MigrationOutcome migrateOne(Document doc, String submissionId, String collection, Long formTemplateId) {
+        FormSubmissionState formState = inferFormState(realApprovalSteps(extractApprovalInfo(doc)), doc);
+
         if (approvalInstanceRepository.findByFormSubmissionIdAndFormSubmissionCollectionName(submissionId, collection).isPresent()) {
-            return MigrationOutcome.SKIPPED;
+            if (ApprovalModel.V2_VALUE.equals(doc.getString(ApprovalModel.DOCUMENT_FIELD))) {
+                return MigrationOutcome.SKIPPED;
+            }
+            stampFormDocument(submissionId, collection, formState);
+            return MigrationOutcome.RECOVERED;
         }
 
         List<Document> rawApprovalInfo = extractApprovalInfo(doc);
         List<Document> realSteps = realApprovalSteps(rawApprovalInfo);
 
-        FormSubmissionState formState = inferFormState(realSteps, doc);
         List<ApprovalInstanceStep> instanceSteps = buildInstanceSteps(realSteps);
         int currentStepSequence = inferCurrentStepSequence(instanceSteps);
         String approvalTemplateId = inferApprovalTemplateId(realSteps);
@@ -139,8 +142,6 @@ public class LegacyApprovalMigrationServiceImpl implements LegacyApprovalMigrati
         Date docCreatedAt = doc.getDate("created_at");
         instance.setCreatedAt(docCreatedAt != null ? docCreatedAt.toInstant() : Instant.now());
         instance.setCreatedBy(asLong(doc.get("created_by")));
-        instance.setUpdatedAt(Instant.now());
-        instance.setUpdatedBy(0L);
 
         approvalInstanceRepository.save(instance);
         stampFormDocument(submissionId, collection, formState);
@@ -292,10 +293,15 @@ public class LegacyApprovalMigrationServiceImpl implements LegacyApprovalMigrati
         snapshot.setCreatedAt(doc.getDate("created_at"));
         snapshot.setCreatedBy(asLong(doc.get("created_by")));
         snapshot.setRelatedInspectorIds(asLongList(doc.get("related_inspector_ids")));
+        snapshot.setRelatedInspectors(doc.get("related_inspectors"));
         snapshot.setRelatedProductIds(asLongList(doc.get("related_product_ids")));
+        snapshot.setRelatedProducts(doc.get("related_products"));
         snapshot.setRelatedBatchIds(asLongList(doc.get("related_batch_ids")));
+        snapshot.setRelatedBatches(doc.get("related_batches"));
         snapshot.setRelatedTeamId(asLong(doc.get("related_team_id")));
+        snapshot.setRelatedTeams(doc.get("related_teams"));
         snapshot.setRelatedShiftId(asLong(doc.get("related_shift_id")));
+        snapshot.setRelatedShifts(doc.get("related_shifts"));
         return snapshot;
     }
 
@@ -304,8 +310,7 @@ public class LegacyApprovalMigrationServiceImpl implements LegacyApprovalMigrati
     private void stampFormDocument(String submissionId, String collection, FormSubmissionState state) {
         Update update = new Update()
                 .set(ApprovalModel.DOCUMENT_FIELD, ApprovalModel.V2_VALUE)
-                .set("state", state.dbValue())
-                .set("updated_at", new Date());
+                .set("state", state.dbValue());
         mongoTemplate.updateFirst(
                 new Query(Criteria.where("_id").is(new ObjectId(submissionId))),
                 update,
@@ -315,11 +320,11 @@ public class LegacyApprovalMigrationServiceImpl implements LegacyApprovalMigrati
 
     // ── helpers ─────────────────────────────────────────────────────────────
 
-    private List<Document> fetchLegacyBatch(String collection, int offset, int limit) {
+    private List<Document> fetchLegacyBatch(String collection, int limit) {
         Query query = new Query(new Criteria().andOperator(
                 Criteria.where(ApprovalModel.DOCUMENT_FIELD).ne(ApprovalModel.V2_VALUE),
                 Criteria.where("state").ne("void")
-        )).skip(offset).limit(limit);
+        )).limit(limit);
         return mongoTemplate.find(query, Document.class, collection);
     }
 
@@ -349,5 +354,5 @@ public class LegacyApprovalMigrationServiceImpl implements LegacyApprovalMigrati
         return null;
     }
 
-    private enum MigrationOutcome { MIGRATED, SKIPPED }
+    private enum MigrationOutcome { MIGRATED, RECOVERED, SKIPPED }
 }
