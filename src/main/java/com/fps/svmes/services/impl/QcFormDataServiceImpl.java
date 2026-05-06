@@ -88,7 +88,6 @@ public class QcFormDataServiceImpl implements QcFormDataService {
         FormSubmissionState initialState = hasApprovalTemplate ? FormSubmissionState.DRAFT : FormSubmissionState.ARCHIVED;
 
         Map<String, Object> document = new HashMap<>(formData);
-        document.put("version_group_id", UUID.randomUUID().toString());
         document.put("version", 1);
         document.put("created_at", now);
         document.put("updated_at", now);
@@ -137,7 +136,6 @@ public class QcFormDataServiceImpl implements QcFormDataService {
         response.put("object_id", submissionId);
         response.put("state", finalState.dbValue());
         response.put("version", insertedDocument.getInteger("version", 1));
-        response.put("version_group_id", insertedDocument.getString("version_group_id"));
         if (!warnings.isEmpty()) {
             response.put("warnings", warnings);
         }
@@ -161,11 +159,13 @@ public class QcFormDataServiceImpl implements QcFormDataService {
 
         String versionGroupId = parent.getString("version_group_id");
         Integer parentVersion = parent.getInteger("version");
+        boolean generatedVersionGroupId = false;
         if (versionGroupId == null || parentVersion == null) {
             versionGroupId = UUID.randomUUID().toString();
             parentVersion = 1;
             parent.put("version_group_id", versionGroupId);
             parent.put("version", parentVersion);
+            generatedVersionGroupId = true;
         }
         newDoc.put("version_group_id", versionGroupId);
         newDoc.put("version", parentVersion + 1);
@@ -195,11 +195,14 @@ public class QcFormDataServiceImpl implements QcFormDataService {
             log.debug("Skipping approval instance update for legacy submission edit: parent={}", parentSubmissionId);
         }
 
-        mongoTemplate.updateFirst(
-                submissionIdQuery(parentSubmissionId),
-                new Update().set("state", previousRecordState.dbValue()).set("updated_at", new Date()),
-                collectionName
-        );
+        Update parentUpdate = new Update()
+                .set("state", previousRecordState.dbValue())
+                .set("updated_at", new Date());
+        if (generatedVersionGroupId) {
+            parentUpdate.set("version_group_id", versionGroupId)
+                    .set("version", parentVersion);
+        }
+        mongoTemplate.updateFirst(submissionIdQuery(parentSubmissionId), parentUpdate, collectionName);
 
         List<String> warnings = new ArrayList<>();
         runPostEditCompatibilityWork(parentSubmissionId, newSubmissionId, collectionName, formTemplateId, userId, newDoc, warnings);
@@ -532,10 +535,15 @@ public class QcFormDataServiceImpl implements QcFormDataService {
         dto.setCreatedBy(snapshot == null ? null : snapshot.getCreatedBy());
         dto.setUpdatedBy(instance.getUpdatedBy());
         dto.setRelatedInspectorIds(snapshot == null ? null : snapshot.getRelatedInspectorIds());
+        dto.setRelatedInspectors(snapshot == null ? null : snapshot.getRelatedInspectors());
         dto.setRelatedProductIds(snapshot == null ? null : snapshot.getRelatedProductIds());
+        dto.setRelatedProducts(snapshot == null ? null : snapshot.getRelatedProducts());
         dto.setRelatedBatchIds(snapshot == null ? null : snapshot.getRelatedBatchIds());
+        dto.setRelatedBatches(snapshot == null ? null : snapshot.getRelatedBatches());
         dto.setRelatedTeamId(snapshot == null ? null : snapshot.getRelatedTeamId());
+        dto.setRelatedTeams(snapshot == null ? null : snapshot.getRelatedTeams());
         dto.setRelatedShiftId(snapshot == null ? null : snapshot.getRelatedShiftId());
+        dto.setRelatedShifts(snapshot == null ? null : snapshot.getRelatedShifts());
         dto.setIsAlarmTriggered(snapshot == null ? instance.getIsAlarmTriggered() : snapshot.getIsAlarmTriggered());
         dto.setFormData(includeFormData && latestForm != null ? new HashMap<>(latestForm) : null);
         return dto;

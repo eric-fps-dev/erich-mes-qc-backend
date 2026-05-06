@@ -10,5 +10,6 @@ public enum ApprovalAction {
     REQUESTED_CORRECTION,
     REJECTED_FULL_RESET,  // Legacy state
     REJECTED_PARTIAL_RESET,  // Legacy state
-    REJECTED_DISCARD
+    REJECTED_DISCARD,  // Legacy state
+    DISCARD
 }

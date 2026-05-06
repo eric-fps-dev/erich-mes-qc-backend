@@ -26,10 +26,15 @@ public class ApprovalInstanceListItemDTO {
     private Object createdBy;
     private Long updatedBy;
     private Object relatedInspectorIds;
+    private Object relatedInspectors;
     private Object relatedProductIds;
+    private Object relatedProducts;
     private Object relatedBatchIds;
+    private Object relatedBatches;
     private Object relatedTeamId;
+    private Object relatedTeams;
     private Object relatedShiftId;
+    private Object relatedShifts;
     private Boolean isAlarmTriggered;
     private Map<String, Object> formData;
 }

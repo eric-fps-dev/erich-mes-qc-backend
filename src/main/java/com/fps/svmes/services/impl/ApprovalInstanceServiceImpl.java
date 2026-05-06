@@ -119,10 +119,6 @@ public class ApprovalInstanceServiceImpl implements ApprovalInstanceService {
     @Override
     public void voidForFormSubmissionDelete(FormSubmissionActionRequest request) {
         ApprovalInstance instance = getActiveByFormSubmission(request.getSubmissionId(), request.getCollectionName());
-        Document formSubmission = formSubmissionStateUpdater.getLatestFormSubmission(instance.getFormSubmissionId(), instance.getFormSubmissionCollectionName());
-        FormSubmissionState formSubmissionState = approvalModelResolver.resolveLifecycleState(formSubmission);
-        guard(List.of(FormSubmissionState.DRAFT, FormSubmissionState.UNDER_REVIEW, FormSubmissionState.ARCHIVED).contains(formSubmissionState),
-                "Only draft, under review, or archived form submissions can be voided.");
         markAllFutureStepsVoided(instance);
         instance.setStatus(0);
         touch(instance, userIdForAudit(request));
@@ -398,7 +394,7 @@ public class ApprovalInstanceServiceImpl implements ApprovalInstanceService {
         ApprovalActor actor = actorFromRequest(request);
         guard(actorMatchesStep(current, actor), "Actor does not match the current approval step.");
         List<StepStateSnapshot> stepSnapshots = snapshotAllSteps(instance.getApprovalSteps());
-        ApprovalActionLog logEntry = buildActionLog(instance, request, ApprovalAction.REJECTED_DISCARD, safeCurrent(instance), true, formSubmission);
+        ApprovalActionLog logEntry = buildActionLog(instance, request, ApprovalAction.DISCARD, safeCurrent(instance), true, formSubmission);
         appendActionLog(instance, logEntry);
         current.setLastActionRecord(logEntry);
         markAllFutureStepsVoided(instance);
@@ -905,10 +901,15 @@ public class ApprovalInstanceServiceImpl implements ApprovalInstanceService {
         snapshot.setCreatedAt(dateValue(formSubmission.get("created_at")));
         snapshot.setCreatedBy(asLong(formSubmission.get("created_by")));
         snapshot.setRelatedInspectorIds(asLongList(formSubmission.get("related_inspector_ids")));
+        snapshot.setRelatedInspectors(formSubmission.get("related_inspectors"));
         snapshot.setRelatedProductIds(asLongList(formSubmission.get("related_product_ids")));
+        snapshot.setRelatedProducts(formSubmission.get("related_products"));
         snapshot.setRelatedBatchIds(asLongList(formSubmission.get("related_batch_ids")));
+        snapshot.setRelatedBatches(formSubmission.get("related_batches"));
         snapshot.setRelatedTeamId(asLong(formSubmission.get("related_team_id")));
+        snapshot.setRelatedTeams(formSubmission.get("related_teams"));
         snapshot.setRelatedShiftId(asLong(formSubmission.get("related_shift_id")));
+        snapshot.setRelatedShifts(formSubmission.get("related_shifts"));
         Boolean isAlarmTriggered = isAlarmTriggered(formSubmission.get("exceeded_info"));
         snapshot.setIsAlarmTriggered(isAlarmTriggered);
         instance.setIsAlarmTriggered(isAlarmTriggered);

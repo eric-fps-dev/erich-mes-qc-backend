@@ -2,7 +2,9 @@ package com.fps.svmes.controllers;
 
 import com.fps.shared.dto.responses.ResponseResult;
 import com.fps.shared.dto.responses.ResponseStatus;
+import com.fps.svmes.dto.ApprovalInstanceSnapshotBackfillResult;
 import com.fps.svmes.dto.LegacyMigrationResult;
+import com.fps.svmes.services.ApprovalInstanceSnapshotBackfillService;
 import com.fps.svmes.services.LegacyApprovalMigrationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -23,6 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class MigrationController {
 
     private final LegacyApprovalMigrationService legacyApprovalMigrationService;
+    private final ApprovalInstanceSnapshotBackfillService approvalInstanceSnapshotBackfillService;
 
     @PostMapping("/legacy-approval")
     @Operation(
@@ -44,6 +47,26 @@ public class MigrationController {
         } catch (Exception e) {
             log.error("Legacy approval migration failed", e);
             return ResponseResult.fail("Migration failed: " + e.getMessage(), ResponseStatus.INTERNAL_SERVER_ERROR, e);
+        }
+    }
+
+    @PostMapping("/approval-instance-snapshots")
+    @Operation(
+            summary = "Backfill approval instance filter snapshots",
+            description = "Refreshes filterSnapshot for all existing ApprovalInstance documents from their current form submission documents. "
+                    + "Use this after adding new snapshot display fields such as related entity names."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Backfill completed; check totalFailed and failures for partial errors"),
+            @ApiResponse(responseCode = "500", description = "Unexpected error during snapshot backfill")
+    })
+    public ResponseEntity<ResponseResult<ApprovalInstanceSnapshotBackfillResult>> backfillApprovalInstanceSnapshots() {
+        try {
+            ApprovalInstanceSnapshotBackfillResult result = approvalInstanceSnapshotBackfillService.backfillAll();
+            return ResponseResult.of(result, ResponseStatus.SUCCESS);
+        } catch (Exception e) {
+            log.error("Approval instance snapshot backfill failed", e);
+            return ResponseResult.fail("Snapshot backfill failed: " + e.getMessage(), ResponseStatus.INTERNAL_SERVER_ERROR, e);
         }
     }
 }
