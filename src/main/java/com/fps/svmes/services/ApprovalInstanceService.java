@@ -11,7 +11,7 @@ import java.util.List;
  */
 public interface ApprovalInstanceService {
     /**
-     * Creates a draft approval instance from the referenced approval template.
+     * Creates an approval instance from the referenced approval template.
      */
     ApprovalInstance create(String formSubmissionId, String formSubmissionCollectionName, Long formTemplateId, String approvalTemplateId, Long createdBy);
 
@@ -26,22 +26,22 @@ public interface ApprovalInstanceService {
     void onFormSubmissionEdited(String oldFormSubmissionId, String newFormSubmissionId, String formSubmissionCollectionName, Long updatedBy);
 
     /**
-     * Voids the approval instance when the owning form submission is voided.
+     * Marks the approval instance inactive when the owning form submission is deleted.
      */
     void voidForFormSubmissionDelete(FormSubmissionActionRequest request);
 
     /**
-     * Starts the approval workflow and signals the form submission as under review.
+     * Starts review for a form submission, optionally as a UI-only review guard.
      */
-    void submitForApproval(FormSubmissionActionRequest request);
+    void enterReview(FormSubmissionActionRequest request);
 
     /**
-     * Recalls an in-progress approval instance back to draft.
+     * Exits a UI review guard when allowed by approval history rules.
      */
-    void recall(FormSubmissionActionRequest request);
+    void exitReview(FormSubmissionActionRequest request);
 
     /**
-     * Replaces the approval step list for a draft or in-progress instance.
+     * Replaces the approval step list for a submitted, pending-revision, or in-progress instance.
      */
     ApprovalInstance editApprovalFlow(ApprovalFlowEditRequest request);
 
@@ -61,22 +61,17 @@ public interface ApprovalInstanceService {
     void requestCorrection(FormSubmissionActionRequest request);
 
     /**
-     * Rejects the current review and voids the approval instance.
-     */
-    void rejectDiscard(FormSubmissionActionRequest request);
-
-    /**
      * Returns the active approval instance used by workflow mutations.
      */
     ApprovalInstance getActiveByFormSubmission(String formSubmissionId, String formSubmissionCollectionName);
 
     /**
-     * Returns an approval instance for audit/history reads, including voided instances.
+     * Returns an approval instance for audit/history reads, including inactive instances.
      */
     ApprovalInstance getByFormSubmissionIncludingVoid(String formSubmissionId, String formSubmissionCollectionName);
 
     /**
-     * Returns an approval instance by id for audit/history reads, including voided instances.
+     * Returns an approval instance by id for audit/history reads, including inactive instances.
      */
     ApprovalInstance getByIdIncludingVoid(String approvalInstanceId);
 

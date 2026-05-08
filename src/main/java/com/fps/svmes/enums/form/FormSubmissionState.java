@@ -3,11 +3,9 @@ package com.fps.svmes.enums.form;
 import java.util.Arrays;
 
 public enum FormSubmissionState {
-    DRAFT("draft"),
+    SUBMITTED("submitted"),
     PENDING_REVISION("pending_revision"),
-    UNDER_REVIEW("under_review"),
-    ARCHIVED("archived"),
-    VOID("void");
+    UNDER_REVIEW("under_review");
 
     private final String dbValue;
 

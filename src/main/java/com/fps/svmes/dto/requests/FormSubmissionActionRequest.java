@@ -8,7 +8,7 @@ import lombok.Data;
 
 @Data
 @Schema(
-        description = "Request body for form-submission workflow actions such as submit, recall, approve, forward, request correction, reject, and void.",
+        description = "Request body for form-submission workflow actions such as enter review, exit review, approve, forward, request correction, and delete-related operations.",
         requiredProperties = {
                 "submissionId",
                 "collectionName",
@@ -42,7 +42,7 @@ public class FormSubmissionActionRequest {
     private Long actorUserId;
 
     @Schema(
-            description = "Optional. Approval instance version expected by the client. Required for approval actions that mutate live step progress or flow structure, but not required for submit-for-approval or recall.",
+            description = "Optional. Approval instance version expected by the client. Required for approval actions that mutate live step progress or flow structure, but not required for enter-review or exit-review.",
             example = "1",
             requiredMode = Schema.RequiredMode.NOT_REQUIRED
     )
@@ -75,4 +75,8 @@ public class FormSubmissionActionRequest {
     @JsonProperty("eSignature")
     @Schema(description = "Optional signature or e-signature payload captured with the action.", example = "Justin Li")
     private String eSignature;
+
+    @Schema(description = "Optional. When true, suppress approval action-log writes and approval-step mutation for review entry/exit guard operations.", example = "false")
+    private Boolean omitApprovalActionLog;
+
 }

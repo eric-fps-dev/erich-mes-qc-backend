@@ -8,7 +8,6 @@ import com.fps.svmes.dto.dtos.qcForm.QcApprovalAssignmentDTO;
 import com.fps.svmes.dto.dtos.qcForm.QcFormTemplateDTO;
 import com.fps.svmes.dto.requests.ApprovalInstanceQueryRequest;
 import com.fps.svmes.dto.requests.ApprovalFlowEditRequest;
-import com.fps.svmes.dto.requests.FormSubmissionActionRequest;
 import com.fps.svmes.enums.form.FormSubmissionState;
 import com.fps.svmes.models.nosql.approval.ApprovalInstance;
 import com.fps.svmes.models.nosql.approval.ApprovalInstanceFilterSnapshot;
@@ -86,7 +85,7 @@ public class QcFormDataServiceImpl implements QcFormDataService {
             approvalInstanceService.validateApprovalTemplateExists(approvalTemplateId);
         }
 
-        FormSubmissionState initialState = hasApprovalTemplate ? FormSubmissionState.DRAFT : FormSubmissionState.ARCHIVED;
+        FormSubmissionState initialState = FormSubmissionState.SUBMITTED;
 
         Map<String, Object> document = new HashMap<>(formData);
         document.put("version", 1);
@@ -109,24 +108,25 @@ public class QcFormDataServiceImpl implements QcFormDataService {
         Document insertedDocument = mongoTemplate.insert(new Document(document), collectionName);
         String submissionId = insertedDocument.getObjectId("_id").toString();
 
-        // Standalone Mongo has no transaction here; void the form if its approval instance cannot be created.
+        // Standalone Mongo has no transaction here; remove the form if its approval instance cannot be created.
         ApprovalInstance instance;
         try {
             instance = approvalInstanceService.create(submissionId, collectionName, formTemplateId, approvalTemplateId, userId);
         } catch (RuntimeException e) {
-            markSubmissionVoidAfterApprovalInstanceFailure(submissionId, collectionName, userId, e);
+            deleteSubmissionAfterApprovalInstanceFailure(submissionId, collectionName, e);
             throw e;
         }
 
         FormSubmissionState finalState = initialState;
         if (submitForApproval && instance.getApprovalSteps() != null && !instance.getApprovalSteps().isEmpty()) {
-            FormSubmissionActionRequest autoSubmitRequest = new FormSubmissionActionRequest();
+            com.fps.svmes.dto.requests.FormSubmissionActionRequest autoSubmitRequest =
+                    new com.fps.svmes.dto.requests.FormSubmissionActionRequest();
             autoSubmitRequest.setSubmissionId(submissionId);
             autoSubmitRequest.setCollectionName(collectionName);
             autoSubmitRequest.setActorUserId(userId);
             autoSubmitRequest.setExpectedFormSubmissionVersion(insertedDocument.getInteger("version", 1));
             autoSubmitRequest.setExpectedApprovalInstanceVersion(instance.getVersionNumber());
-            approvalInstanceService.submitForApproval(autoSubmitRequest);
+            approvalInstanceService.enterReview(autoSubmitRequest);
             finalState = FormSubmissionState.UNDER_REVIEW;
         }
 
@@ -155,11 +155,10 @@ public class QcFormDataServiceImpl implements QcFormDataService {
 
     @Override
     public Map<String, Object> editFormData(String collectionName, Long userId, String parentSubmissionId, Long formTemplateId,
-                                            FormSubmissionState previousRecordState, Map<String, Object> updatedData) {
+                                            Map<String, Object> updatedData) {
         Document parent = findSubmission(parentSubmissionId, collectionName);
-        requireState(parent, List.of(FormSubmissionState.DRAFT, FormSubmissionState.PENDING_REVISION),
-                "Only draft or pending revision form entries can be edited.");
-        validatePreviousRecordState(previousRecordState);
+        requireState(parent, List.of(FormSubmissionState.SUBMITTED, FormSubmissionState.PENDING_REVISION),
+                "Only submitted or pending revision form entries can be edited.");
         Date now = new Date();
 
         ApprovalModel parentModel = approvalModelResolver.resolveApprovalModel(parent);
@@ -198,7 +197,7 @@ public class QcFormDataServiceImpl implements QcFormDataService {
             try {
                 approvalInstanceService.onFormSubmissionEdited(parentSubmissionId, newSubmissionId, collectionName, userId);
             } catch (RuntimeException e) {
-                markSubmissionVoidAfterApprovalInstanceFailure(newSubmissionId, collectionName, userId, e);
+                deleteSubmissionAfterApprovalInstanceFailure(newSubmissionId, collectionName, e);
                 throw e;
             }
         } else {
@@ -206,7 +205,7 @@ public class QcFormDataServiceImpl implements QcFormDataService {
         }
 
         Update parentUpdate = new Update()
-                .set("state", previousRecordState.dbValue())
+                .set("state", FormSubmissionState.SUBMITTED.dbValue())
                 .set("updated_at", new Date());
         if (generatedVersionGroupId) {
             parentUpdate.set("version_group_id", versionGroupId)
@@ -225,30 +224,6 @@ public class QcFormDataServiceImpl implements QcFormDataService {
         }
         response.put("message", "Edited form data inserted with parent linkage.");
         return response;
-    }
-
-    @Override
-    public void voidFormSubmission(FormSubmissionActionRequest request) {
-        Document submission = findSubmission(request.getSubmissionId(), request.getCollectionName());
-        FormSubmissionState state = approvalModelResolver.resolveLifecycleState(submission);
-        if (!List.of(FormSubmissionState.DRAFT, FormSubmissionState.UNDER_REVIEW, FormSubmissionState.ARCHIVED).contains(state)) {
-            throw new IllegalStateException("Only draft, under review, or archived form entries can be voided.");
-        }
-        ApprovalModel model = approvalModelResolver.resolveApprovalModel(submission);
-        if (model == ApprovalModel.V2) {
-            approvalInstanceService.voidForFormSubmissionDelete(request);
-        } else {
-            log.debug("Skipping approval instance void for legacy submission: {}", request.getSubmissionId());
-        }
-        setSubmissionState(request.getSubmissionId(), request.getCollectionName(), FormSubmissionState.VOID);
-        if (model == ApprovalModel.V2) {
-            approvalInstanceService.refreshFilterSnapshot(request.getSubmissionId(), request.getCollectionName(), request.getActorUserId());
-        }
-    }
-
-    @Override
-    public void submitForApproval(FormSubmissionActionRequest request) {
-        approvalInstanceService.submitForApproval(request);
     }
 
     @Override
@@ -622,15 +597,11 @@ public class QcFormDataServiceImpl implements QcFormDataService {
     /**
      * Compensates for approval-instance failures after a form document has already been inserted.
      */
-    private void markSubmissionVoidAfterApprovalInstanceFailure(String submissionId, String collectionName, Long userId, RuntimeException failure) {
+    private void deleteSubmissionAfterApprovalInstanceFailure(String submissionId, String collectionName, RuntimeException failure) {
         try {
-            setSubmissionState(
-                    submissionId,
-                    collectionName,
-                    FormSubmissionState.VOID
-            );
-        } catch (RuntimeException voidFailure) {
-            log.error("Failed to void submission {} after approval instance failure", submissionId, voidFailure);
+            mongoTemplate.remove(submissionIdQuery(submissionId), collectionName);
+        } catch (RuntimeException deleteFailure) {
+            log.error("Failed to remove submission {} after approval instance failure", submissionId, deleteFailure);
         }
     }
 
@@ -740,12 +711,6 @@ public class QcFormDataServiceImpl implements QcFormDataService {
     private void requireState(Document submission, List<FormSubmissionState> requiredStates, String message) {
         if (!requiredStates.contains(approvalModelResolver.resolveLifecycleState(submission))) {
             throw new IllegalStateException(message);
-        }
-    }
-
-    private void validatePreviousRecordState(FormSubmissionState previousRecordState) {
-        if (!List.of(FormSubmissionState.VOID, FormSubmissionState.ARCHIVED).contains(previousRecordState)) {
-            throw new IllegalArgumentException("previousRecordState must be either 'void' or 'archived'.");
         }
     }
 

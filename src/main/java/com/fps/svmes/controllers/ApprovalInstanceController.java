@@ -26,7 +26,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 /**
- * Approval instance workflow: query, inspect, approve, forward, reject, and flow edits.
+ * Approval instance workflow: query, inspect, approve, forward, request correction, and flow edits.
  */
 @RestController
 @Slf4j
@@ -234,28 +234,6 @@ public class ApprovalInstanceController {
         } catch (Exception e) {
             log.error("Error requesting correction", e);
             return ResponseResult.fail("Error requesting correction: " + e.getMessage(), ResponseStatus.INTERNAL_SERVER_ERROR, e);
-        }
-    }
-
-    @PostMapping("/approval/reject-discard")
-    @Operation(
-            summary = "Reject and discard",
-            description = "Rejects the current approval step and voids the form submission and approval instance. This is the discard path, not a redo path."
-    )
-    @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Form submission rejected and voided"),
-            @ApiResponse(responseCode = "409", description = "Invalid approval state or stale submitted versions"),
-            @ApiResponse(responseCode = "500", description = "Unexpected error rejecting form submission")
-    })
-    public ResponseEntity<ResponseResult<String>> rejectDiscard(@Valid @RequestBody FormSubmissionActionRequest request) {
-        try {
-            approvalInstanceService.rejectDiscard(request);
-            return ResponseResult.of("Form submission rejected and voided", ResponseStatus.SUCCESS);
-        } catch (IllegalStateException | ApprovalInstanceException e) {
-            return ResponseResult.fail(e.getMessage(), ResponseStatus.CONFLICT, e);
-        } catch (Exception e) {
-            log.error("Error rejecting form submission", e);
-            return ResponseResult.fail("Error rejecting form submission: " + e.getMessage(), ResponseStatus.INTERNAL_SERVER_ERROR, e);
         }
     }
 

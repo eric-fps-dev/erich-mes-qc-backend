@@ -181,15 +181,14 @@ public class LegacyApprovalMigrationServiceImpl implements LegacyApprovalMigrati
         }
         if (realSteps.isEmpty()) {
             // flow_1: no approver steps → auto-archived on creation
-            return FormSubmissionState.ARCHIVED;
+            return FormSubmissionState.SUBMITTED;
         }
         for (Document step : realSteps) {
             if ("pending".equals(step.getString("status"))) {
                 return FormSubmissionState.UNDER_REVIEW;
             }
         }
-        boolean allCompleted = realSteps.stream().allMatch(s -> "completed".equals(s.getString("status")));
-        return allCompleted ? FormSubmissionState.ARCHIVED : FormSubmissionState.DRAFT;
+        return FormSubmissionState.SUBMITTED;
     }
 
     // ── step construction ───────────────────────────────────────────────────

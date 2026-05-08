@@ -25,12 +25,12 @@ public class SubmissionApprovalModelResolverImpl implements SubmissionApprovalMo
         }
         // Legacy inference: derive state from embedded approval_info when state field is absent
         if (legacyApprovalComplete(submission)) {
-            return FormSubmissionState.ARCHIVED;
+            return FormSubmissionState.SUBMITTED;
         }
         if (legacyApprovalInProgress(submission)) {
             return FormSubmissionState.UNDER_REVIEW;
         }
-        return FormSubmissionState.DRAFT;
+        return FormSubmissionState.SUBMITTED;
     }
 
     private boolean legacyApprovalComplete(Document submission) {

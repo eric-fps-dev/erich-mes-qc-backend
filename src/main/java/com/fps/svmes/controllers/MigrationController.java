@@ -33,7 +33,7 @@ public class MigrationController {
             description = "Backfills ApprovalInstance documents for all LEGACY form submissions that lack one, "
                     + "then stamps approvalModel='v2' and the inferred state on each migrated form document. "
                     + "Idempotent — already-migrated submissions are counted as skipped and not modified. "
-                    + "flow_1 (auto-approved) submissions get an ApprovalInstance with no steps and state=archived. "
+                    + "flow_1 submissions get an ApprovalInstance with no steps and state=submitted. "
                     + "Role IDs and template IDs are read from qc.legacy-migration.* properties."
     )
     @ApiResponses({

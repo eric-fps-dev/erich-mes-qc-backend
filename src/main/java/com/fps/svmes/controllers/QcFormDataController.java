@@ -3,10 +3,10 @@ package com.fps.svmes.controllers;
 import com.fps.shared.dto.responses.ResponseResult;
 import com.fps.shared.dto.responses.ResponseStatus;
 import com.fps.svmes.dto.requests.FormSubmissionActionRequest;
-import com.fps.svmes.enums.form.FormSubmissionState;
 import com.fps.svmes.exceptions.ApprovalInstanceException;
 import com.fps.svmes.services.ApprovalInstanceService;
 import com.fps.svmes.services.QcFormDataService;
+import com.fps.svmes.services.QcTaskSubmissionLogsService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
@@ -25,7 +25,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Form submission lifecycle: create, edit, void, state transitions, and version history.
+ * Form submission lifecycle: create, edit, delete, state transitions, and version history.
  */
 @RestController
 @Slf4j
@@ -36,13 +36,14 @@ public class QcFormDataController {
 
     private final QcFormDataService qcFormDataService;
     private final ApprovalInstanceService approvalInstanceService;
+    private final QcTaskSubmissionLogsService qcTaskSubmissionLogsService;
 
     @PostMapping("/insert-form/{userId}/{collectionName}")
     @Operation(
             summary = "Create form submission",
             description = "Creates a form submission in the dynamic Mongo collection, initializes version to 1, and creates the corresponding approval instance. "
-                    + "When the form template has no approval template, the form is auto-archived. "
-                    + "When submitForApproval=true and the form has approval steps, the form is also submitted for approval in the same call."
+                    + "New submissions start in submitted state. "
+                    + "When submitForApproval=true and the form has approval steps, the form is also moved into under-review in the same call."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Form submission created successfully"),
@@ -67,13 +68,11 @@ public class QcFormDataController {
     @PostMapping("/edit-form/{userId}/{collectionName}")
     @Operation(
             summary = "Edit a form submission",
-            description = "Creates a new version of an existing draft or pending revision form submission while preserving version history. "
-                    + "Requires parentId and templateId. Optional previousRecordState accepts 'void' or 'archived' and defaults to 'void'. "
-                    + "Archived old versions are kept for history and excluded from normal form-submission list results."
+            description = "Creates a new version of an existing submitted or pending revision form submission while preserving version history. "
+                    + "Requires parentId and templateId. Previous versions are always moved back to submitted."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Form submission version created successfully"),
-            @ApiResponse(responseCode = "400", description = "Invalid previousRecordState value"),
             @ApiResponse(responseCode = "404", description = "Original form submission was not found"),
             @ApiResponse(responseCode = "409", description = "Form submission cannot be edited in its current state"),
             @ApiResponse(responseCode = "500", description = "Unexpected error editing form data")
@@ -83,7 +82,6 @@ public class QcFormDataController {
             @PathVariable Long userId,
             @RequestParam("parentId") String parentSubmissionId,
             @RequestParam("templateId") Long formTemplateId,
-            @RequestParam(name = "previousRecordState", defaultValue = "void") String previousRecordState,
             @RequestBody Map<String, Object> updatedData) {
         try {
             return ResponseResult.of(
@@ -92,13 +90,12 @@ public class QcFormDataController {
                             userId,
                             parentSubmissionId,
                             formTemplateId,
-                            parsePreviousRecordState(previousRecordState),
                             updatedData
                     ),
                     ResponseStatus.SUCCESS
             );
         } catch (IllegalArgumentException e) {
-            ResponseStatus status = isBadEditRequest(e) ? ResponseStatus.BAD_REQUEST : ResponseStatus.NOT_FOUND;
+            ResponseStatus status = ResponseStatus.NOT_FOUND;
             return ResponseResult.fail(e.getMessage(), status, e);
         } catch (IllegalStateException e) {
             return ResponseResult.fail(e.getMessage(), ResponseStatus.CONFLICT, e);
@@ -110,109 +107,110 @@ public class QcFormDataController {
 
     @DeleteMapping("/form-submission")
     @Operation(
-            summary = "Void form submission",
-            description = "Transitions a form submission and its approval instance to void instead of physically deleting data. Request requires actorUserId."
+            summary = "Delete form submission",
+            description = "Hard deletes a form submission and related approval-instance records."
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Form submission voided successfully"),
-            @ApiResponse(responseCode = "409", description = "Form submission or approval instance cannot be voided in its current state"),
-            @ApiResponse(responseCode = "500", description = "Unexpected error voiding form submission")
+            @ApiResponse(responseCode = "200", description = "Form submission deleted successfully"),
+            @ApiResponse(responseCode = "500", description = "Unexpected error deleting form submission")
     })
-    public ResponseEntity<ResponseResult<String>> voidFormSubmission(@Valid @RequestBody FormSubmissionActionRequest request) {
+    public ResponseEntity<ResponseResult<String>> deleteFormSubmission(@Valid @RequestBody FormSubmissionActionRequest request) {
         try {
-            qcFormDataService.voidFormSubmission(request);
-            return ResponseResult.of("Form submission voided successfully", ResponseStatus.SUCCESS);
-        } catch (IllegalStateException | ApprovalInstanceException e) {
-            return ResponseResult.fail(e.getMessage(), ResponseStatus.CONFLICT, e);
+            qcTaskSubmissionLogsService.deleteSubmissionLog(request.getSubmissionId(), request.getCollectionName());
+            return ResponseResult.of("Form submission deleted successfully", ResponseStatus.SUCCESS);
         } catch (Exception e) {
-            log.error("Error voiding form submission", e);
-            return ResponseResult.fail("Error voiding form submission: " + e.getMessage(), ResponseStatus.INTERNAL_SERVER_ERROR, e);
+            log.error("Error deleting form submission", e);
+            return ResponseResult.fail("Error deleting form submission: " + e.getMessage(), ResponseStatus.INTERNAL_SERVER_ERROR, e);
         }
     }
 
-    @PostMapping("/submit-for-approval")
+    @PostMapping("/enter-review")
     @Operation(
-            summary = "Submit form submission for approval",
-            description = "Moves a draft or pending revision form submission into the approval workflow. Request requires actorUserId and expectedFormSubmissionVersion. expectedApprovalInstanceVersion is optional for this action."
+            summary = "Enter review",
+            description = "Moves a submitted or pending revision form submission into under-review state. "
+                    + "When omitApprovalActionLog=true, this acts as a UI review guard only and will not write approval action logs or mutate approval-step state."
     )
     @io.swagger.v3.oas.annotations.parameters.RequestBody(
             required = true,
-            description = "Submit-for-approval payload. Workers do not need approval-instance version access for this action.",
+            description = "Enter-review payload. Workers do not need approval-instance version access for this action.",
             content = @Content(
                     mediaType = "application/json",
                     schema = @Schema(implementation = FormSubmissionActionRequest.class),
                     examples = @ExampleObject(
-                            name = "SubmitForApproval",
-                            summary = "Submit without approval instance version",
+                            name = "EnterReview",
+                            summary = "Enter review without approval-instance version",
                             value = """
                                     {
                                       "submissionId": "69d44796b8b3934d9cb382f7",
                                       "collectionName": "form_template_695_202604",
                                       "actorUserId": 274,
                                       "expectedFormSubmissionVersion": 1,
-                                      "comment": "submit for approval"
+                                      "comment": "open approval detail"
                                     }
                                     """
                     )
             )
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Form submission submitted for approval"),
+            @ApiResponse(responseCode = "200", description = "Form submission entered review successfully"),
             @ApiResponse(responseCode = "409", description = "State is invalid or the submitted versions are stale"),
-            @ApiResponse(responseCode = "500", description = "Unexpected error submitting for approval")
+            @ApiResponse(responseCode = "500", description = "Unexpected error entering review")
     })
-    public ResponseEntity<ResponseResult<String>> submitForApproval(@Valid @RequestBody FormSubmissionActionRequest request) {
+    public ResponseEntity<ResponseResult<String>> enterReview(@Valid @RequestBody FormSubmissionActionRequest request) {
         try {
-            qcFormDataService.submitForApproval(request);
-            return ResponseResult.of("Form submission submitted for approval", ResponseStatus.SUCCESS);
+            approvalInstanceService.enterReview(request);
+            return ResponseResult.of("Form submission entered review successfully", ResponseStatus.SUCCESS);
         } catch (IllegalStateException | ApprovalInstanceException e) {
             return ResponseResult.fail(e.getMessage(), ResponseStatus.CONFLICT, e);
         } catch (Exception e) {
-            log.error("Error submitting form submission for approval", e);
-            return ResponseResult.fail("Error submitting for approval: " + e.getMessage(), ResponseStatus.INTERNAL_SERVER_ERROR, e);
+            log.error("Error entering review", e);
+            return ResponseResult.fail("Error entering review: " + e.getMessage(), ResponseStatus.INTERNAL_SERVER_ERROR, e);
         }
     }
 
-    @PostMapping("/recall")
+    @PostMapping("/exit-review")
     @Operation(
-            summary = "Recall form submission to draft",
-            description = "Recalls an in-progress approval instance back to draft without resetting the current step sequence. Request must include expectedFormSubmissionVersion. expectedApprovalInstanceVersion is optional for this action."
+            summary = "Exit review",
+            description = "Exits a review guard from under-review state. "
+                    + "If approval-instance action history already exists, the form remains under review. "
+                    + "When omitApprovalActionLog=true, this acts as a UI review-close path and will not write approval action logs or mutate approval-step state."
     )
     @io.swagger.v3.oas.annotations.parameters.RequestBody(
             required = true,
-            description = "Recall payload. Workers do not need approval-instance version access for this action.",
+            description = "Exit-review payload. Workers do not need approval-instance version access for this action.",
             content = @Content(
                     mediaType = "application/json",
                     schema = @Schema(implementation = FormSubmissionActionRequest.class),
                     examples = @ExampleObject(
-                            name = "RecallToDraft",
-                            summary = "Recall without approval instance version",
+                            name = "ExitReview",
+                            summary = "Exit review without approval-instance version",
                             value = """
                                     {
                                       "submissionId": "69d44796b8b3934d9cb382f7",
                                       "collectionName": "form_template_695_202604",
                                       "actorUserId": 274,
                                       "expectedFormSubmissionVersion": 1,
-                                      "comment": "need to revise"
+                                      "omitApprovalActionLog": true,
+                                      "comment": "close approval detail"
                                     }
                                     """
                     )
             )
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Form submission recalled to draft"),
+            @ApiResponse(responseCode = "200", description = "Form submission exited review successfully"),
             @ApiResponse(responseCode = "409", description = "State is invalid or the submitted versions are stale"),
-            @ApiResponse(responseCode = "500", description = "Unexpected error recalling form submission")
+            @ApiResponse(responseCode = "500", description = "Unexpected error exiting review")
     })
-    public ResponseEntity<ResponseResult<String>> recall(@Valid @RequestBody FormSubmissionActionRequest request) {
+    public ResponseEntity<ResponseResult<String>> exitReview(@Valid @RequestBody FormSubmissionActionRequest request) {
         try {
-            approvalInstanceService.recall(request);
-            return ResponseResult.of("Form submission recalled to draft", ResponseStatus.SUCCESS);
+            approvalInstanceService.exitReview(request);
+            return ResponseResult.of("Form submission exited review successfully", ResponseStatus.SUCCESS);
         } catch (IllegalStateException | ApprovalInstanceException e) {
             return ResponseResult.fail(e.getMessage(), ResponseStatus.CONFLICT, e);
         } catch (Exception e) {
-            log.error("Error recalling form submission", e);
-            return ResponseResult.fail("Error recalling form submission: " + e.getMessage(), ResponseStatus.INTERNAL_SERVER_ERROR, e);
+            log.error("Error exiting review", e);
+            return ResponseResult.fail("Error exiting review: " + e.getMessage(), ResponseStatus.INTERNAL_SERVER_ERROR, e);
         }
     }
 
@@ -240,16 +238,4 @@ public class QcFormDataController {
         }
     }
 
-    private FormSubmissionState parsePreviousRecordState(String previousRecordState) {
-        FormSubmissionState state = FormSubmissionState.fromValue(previousRecordState);
-        if (!state.equals(FormSubmissionState.VOID) && !state.equals(FormSubmissionState.ARCHIVED)) {
-            throw new IllegalArgumentException("previousRecordState must be either 'void' or 'archived'.");
-        }
-        return state;
-    }
-
-    private boolean isBadEditRequest(IllegalArgumentException e) {
-        String message = e.getMessage();
-        return message != null && (message.startsWith("previousRecordState") || message.startsWith("Unknown form submission state"));
-    }
 }
