@@ -1,12 +1,10 @@
 package com.fps.svmes.services;
 
 import com.fps.svmes.dto.PagedResultDTO;
-import com.fps.svmes.dto.dtos.qcForm.ApprovalInstanceListItemDTO;
+import com.fps.svmes.dto.dtos.approval.ApprovalInstanceDTO;
+import com.fps.svmes.dto.dtos.approval.ApprovalInstanceListItemDTO;
 import com.fps.svmes.dto.requests.ApprovalFlowEditRequest;
 import com.fps.svmes.dto.requests.ApprovalInstanceQueryRequest;
-import com.fps.svmes.dto.requests.FormSubmissionActionRequest;
-import com.fps.svmes.enums.form.FormSubmissionState;
-import com.fps.svmes.models.nosql.approval.ApprovalInstance;
 import org.bson.Document;
 
 import java.util.List;
@@ -26,6 +24,7 @@ public interface QcFormDataService {
      * retains the prior version as submitted.
      */
     Map<String, Object> editFormData(String collectionName, Long userId, String parentSubmissionId, Long formTemplateId,
+                                     Integer expectedFormSubmissionVersion, String lockToken, String lockSessionId,
                                      Map<String, Object> updatedData);
 
     /**
@@ -41,7 +40,7 @@ public interface QcFormDataService {
     /**
      * Returns the approval instance attached to a form submission for audit/history reads.
      */
-    Object getApprovalInstance(String submissionId, String collectionName);
+    ApprovalInstanceDTO getApprovalInstance(String submissionId, String collectionName);
 
     /**
      * Returns approval steps for legacy approval-info compatibility.
@@ -51,7 +50,7 @@ public interface QcFormDataService {
     /**
      * Returns the full approval instance by approval-instance id.
      */
-    ApprovalInstance getApprovalInstanceById(String approvalInstanceId);
+    ApprovalInstanceDTO getApprovalInstanceById(String approvalInstanceId);
 
     /**
      * Returns paginated approval-instance list rows backed by approval-instance filter snapshots.

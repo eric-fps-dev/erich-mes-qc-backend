@@ -7,12 +7,13 @@ import com.fps.svmes.models.nosql.approval.ApprovalInstance;
 import com.fps.svmes.models.sql.qcForm.QcTaskSubmissionLogs;
 import com.fps.svmes.repositories.jpaRepo.qcForm.QcFormTemplateRepository;
 import com.fps.svmes.repositories.jpaRepo.qcForm.QcTaskSubmissionLogsRepository;
-import com.fps.svmes.repositories.jpaRepo.qcForm.QcApprovalAssignmentRepository;
+// import com.fps.svmes.repositories.jpaRepo.qcForm.QcApprovalAssignmentRepository;
 import com.fps.svmes.services.AlertRecordService;
 import com.fps.svmes.repositories.jpaRepo.user.UserRepository;
 import com.fps.svmes.services.QcTaskSubmissionLogsService;
 import com.fps.svmes.services.QcSnapshotSubmissionService;
 import com.fps.svmes.services.ApprovalInstanceService;
+import com.fps.svmes.services.FormSubmissionMutationGuard;
 import com.itextpdf.text.pdf.BaseFont;
 import com.itextpdf.text.pdf.PdfPCell;
 import com.itextpdf.text.pdf.PdfPTable;
@@ -72,11 +73,14 @@ public class QcTaskSubmissionLogsServiceImpl implements QcTaskSubmissionLogsServ
     @Autowired
     private QcSnapshotSubmissionService qcSnapshotSubmissionService;
 
-    @Autowired
-    private QcApprovalAssignmentRepository qcApprovalAssignmentRepository;
+    // @Autowired
+    // private QcApprovalAssignmentRepository qcApprovalAssignmentRepository;
 
     @Autowired
     private ApprovalInstanceService approvalInstanceService;
+
+    @Autowired
+    private FormSubmissionMutationGuard formSubmissionMutationGuard;
 
     @Override
     public QcTaskSubmissionLogsDTO insertLog(QcTaskSubmissionLogsDTO dto) {
@@ -615,45 +619,10 @@ public class QcTaskSubmissionLogsServiceImpl implements QcTaskSubmissionLogsServ
 
     @Override
     @org.springframework.transaction.annotation.Transactional("transactionManager")
-    public void voidSubmission(String submissionId, String collectionName) {
-        // 1. Check if collection exists
-        if (!mongoTemplate.collectionExists(collectionName)) {
-            throw new RuntimeException("Collection not found: " + collectionName);
-        }
-
-        // 2. Find the document by _id
-        ObjectId oid = new ObjectId(submissionId);
-        Query idQuery = new Query(Criteria.where("_id").is(oid));
-        Document document = mongoTemplate.findOne(idQuery, Document.class, collectionName);
-
-        // 3. Check if it exists
-        if (document == null) {
-            throw new RuntimeException("Document not found: " + submissionId);
-        }
-
-        String state = document.getString("state");
-        if ("void".equals(state)) {
-            return;
-        }
-
-        try {
-            FormSubmissionActionRequest actionRequest = new FormSubmissionActionRequest();
-            actionRequest.setSubmissionId(submissionId);
-            actionRequest.setCollectionName(collectionName);
-            approvalInstanceService.voidForFormSubmissionDelete(actionRequest);
-        } catch (ApprovalInstanceException e) {
-            logger.warn("Approval instance not voided for submission {}: {}", submissionId, e.getMessage());
-        }
-
-        Update update = new Update()
-                .set("state", "void")
-                .set("updated_at", new Date());
-        mongoTemplate.updateFirst(idQuery, update, collectionName);
-    }
-
-    @Override
-    @org.springframework.transaction.annotation.Transactional("transactionManager")
-    public void deleteSubmissionLog(String submissionId, String collectionName) {
+    public void deleteSubmissionLog(FormSubmissionActionRequest request) {
+        formSubmissionMutationGuard.validateDeleteMutation(request);
+        String submissionId = request.getSubmissionId();
+        String collectionName = request.getCollectionName();
         // 1. Check if collection exists
         if (!mongoTemplate.collectionExists(collectionName)) {
             throw new RuntimeException("Collection not found: " + collectionName);
@@ -688,10 +657,10 @@ public class QcTaskSubmissionLogsServiceImpl implements QcTaskSubmissionLogsServ
             // Delete associated alert records
             alertRecordService.deleteBySubmissionIds(idsToDelete);
 
-            // Delete associated approval assignments
-            for (String id : idsToDelete) {
-                qcApprovalAssignmentRepository.deleteBySubmissionId(id);
-            }
+            // // Delete associated approval assignments
+            // for (String id : idsToDelete) {
+            //     qcApprovalAssignmentRepository.deleteBySubmissionId(id);
+            // }
 
             // Delete corresponding approval instances
             Query deleteApprovalInstancesQuery = new Query(Criteria.where("formSubmissionCollectionName").is(collectionName)
@@ -708,8 +677,8 @@ public class QcTaskSubmissionLogsServiceImpl implements QcTaskSubmissionLogsServ
             // Delete associated alert records
             alertRecordService.deleteBySubmissionIds(Collections.singletonList(submissionId));
 
-            // Delete associated approval assignments
-            qcApprovalAssignmentRepository.deleteBySubmissionId(submissionId);
+            // // Delete associated approval assignments
+            // qcApprovalAssignmentRepository.deleteBySubmissionId(submissionId);
 
             // Delete corresponding approval instances
             Query deleteApprovalInstanceQuery = new Query(Criteria.where("formSubmissionCollectionName").is(collectionName)

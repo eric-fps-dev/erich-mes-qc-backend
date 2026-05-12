@@ -1,4 +1,4 @@
-package com.fps.svmes.dto.dtos.qcForm;
+package com.fps.svmes.dto.dtos.approval;
 
 import lombok.Data;
 
@@ -7,24 +7,33 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 
+import com.fps.svmes.models.nosql.approval.ApprovalActionLog;
+
 @Data
-public class ApprovalInstanceListItemDTO {
-    private String submissionId;
-    private String collectionName;
-    private Long formTemplateId;
-    private String formTemplateName;
-    private String formSubmissionState;
+public class ApprovalInstanceDTO {
+    // Approval instance related fields
     private String approvalInstanceId;
     private String approvalTemplateId;
-    private Integer status;
     private Integer currentStepSequence;
     private List<ApprovalInstanceListStepDTO> approvalSteps;
+    private List<ApprovalActionLog> actionLog;
     private Integer approvalInstanceVersion;
-    private Integer formSubmissionVersion;
     private Date createdAt;
     private Instant updatedAt;
     private Object createdBy;
     private Long updatedBy;
+
+    // Form submission related fields
+    private String formSubmissionId;
+    private String formSubmissionState;
+    private Integer formSubmissionVersion;
+
+    // Form template related fields
+    private String collectionName;
+    private Long formTemplateId;
+    private String formTemplateName;
+
+    // Related entities
     private Object relatedInspectorIds;
     private Object relatedInspectors;
     private Object relatedProductIds;
@@ -35,6 +44,7 @@ public class ApprovalInstanceListItemDTO {
     private Object relatedTeams;
     private Object relatedShiftId;
     private Object relatedShifts;
+    
     private Boolean isAlarmTriggered;
     private Map<String, Object> formData;
 }

@@ -26,11 +26,6 @@ public interface ApprovalInstanceService {
     void onFormSubmissionEdited(String oldFormSubmissionId, String newFormSubmissionId, String formSubmissionCollectionName, Long updatedBy);
 
     /**
-     * Marks the approval instance inactive when the owning form submission is deleted.
-     */
-    void voidForFormSubmissionDelete(FormSubmissionActionRequest request);
-
-    /**
      * Starts review for a form submission, optionally as a UI-only review guard.
      */
     void enterReview(FormSubmissionActionRequest request);
@@ -61,19 +56,14 @@ public interface ApprovalInstanceService {
     void requestCorrection(FormSubmissionActionRequest request);
 
     /**
-     * Returns the active approval instance used by workflow mutations.
+     * Returns the approval instance attached to a form submission.
      */
-    ApprovalInstance getActiveByFormSubmission(String formSubmissionId, String formSubmissionCollectionName);
+    ApprovalInstance getByFormSubmission(String formSubmissionId, String formSubmissionCollectionName);
 
     /**
-     * Returns an approval instance for audit/history reads, including inactive instances.
+     * Returns an approval instance by id.
      */
-    ApprovalInstance getByFormSubmissionIncludingVoid(String formSubmissionId, String formSubmissionCollectionName);
-
-    /**
-     * Returns an approval instance by id for audit/history reads, including inactive instances.
-     */
-    ApprovalInstance getByIdIncludingVoid(String approvalInstanceId);
+    ApprovalInstance getById(String approvalInstanceId);
 
     /**
      * Returns approval steps for legacy approval-info compatibility endpoints.

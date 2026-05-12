@@ -1,4 +1,4 @@
-package com.fps.svmes.dto.dtos.qcForm;
+package com.fps.svmes.dto.dtos.approval;
 
 import com.fps.svmes.enums.approval.ApprovalStepState;
 import lombok.Data;

@@ -2,6 +2,7 @@ package com.fps.svmes.services;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fps.svmes.dto.dtos.qcForm.QcTaskSubmissionLogsDTO;
+import com.fps.svmes.dto.requests.FormSubmissionActionRequest;
 import com.fps.svmes.dto.requests.QcSummaryEmailExportRequest;
 import com.fps.svmes.dto.responses.QcSummaryEmailExportResponse;
 import com.fps.svmes.services.impl.QcSummaryEmailExportServiceImpl;
@@ -253,7 +254,7 @@ class QcSummaryEmailExportServiceImplTest {
         }
 
         @Override
-        public void deleteSubmissionLog(String submissionId, String collectionName) {
+        public void deleteSubmissionLog(FormSubmissionActionRequest request) {
             throw new UnsupportedOperationException();
         }
 

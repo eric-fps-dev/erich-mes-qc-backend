@@ -6,7 +6,7 @@ import java.util.Date;
 import java.util.List;
 
 @Data
-public class ApprovalInstanceFilterSnapshot {
+public class FormSubmissionSnapshotForFilter {
     private Long formTemplateId;
     private String formSubmissionState;
     private Integer formSubmissionVersion;

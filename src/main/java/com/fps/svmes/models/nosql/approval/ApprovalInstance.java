@@ -44,5 +44,5 @@ public class ApprovalInstance extends BaseInstant {
     private Boolean isAlarmTriggered;
 
     @Field("filterSnapshot")
-    private ApprovalInstanceFilterSnapshot filterSnapshot;
+    private FormSubmissionSnapshotForFilter filterSnapshot;
 }

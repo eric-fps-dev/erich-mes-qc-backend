@@ -2,22 +2,24 @@ package com.fps.svmes.services.impl;
 
 import com.fps.svmes.dto.PagedResultDTO;
 import com.fps.svmes.dto.dtos.alert.ExceededFieldInfoDTO;
-import com.fps.svmes.dto.dtos.qcForm.ApprovalInstanceListItemDTO;
-import com.fps.svmes.dto.dtos.qcForm.ApprovalInstanceListStepDTO;
-import com.fps.svmes.dto.dtos.qcForm.QcApprovalAssignmentDTO;
+import com.fps.svmes.dto.dtos.approval.ApprovalInstanceDTO;
+import com.fps.svmes.dto.dtos.approval.ApprovalInstanceListItemDTO;
+import com.fps.svmes.dto.dtos.approval.ApprovalInstanceListStepDTO;
+// import com.fps.svmes.dto.dtos.qcForm.QcApprovalAssignmentDTO;
 import com.fps.svmes.dto.dtos.qcForm.QcFormTemplateDTO;
+import com.fps.svmes.enums.approval.ApprovalStepState;
 import com.fps.svmes.dto.requests.ApprovalInstanceQueryRequest;
 import com.fps.svmes.dto.requests.ApprovalFlowEditRequest;
 import com.fps.svmes.enums.form.FormSubmissionState;
 import com.fps.svmes.models.nosql.approval.ApprovalInstance;
-import com.fps.svmes.models.nosql.approval.ApprovalInstanceFilterSnapshot;
+import com.fps.svmes.models.nosql.approval.FormSubmissionSnapshotForFilter;
 import com.fps.svmes.models.nosql.approval.ApprovalInstanceStep;
 import com.fps.svmes.enums.form.ApprovalModel;
 import com.fps.svmes.services.ApprovalInfoGeneratorService;
 import com.fps.svmes.services.ApprovalInstanceService;
 import com.fps.svmes.services.ControlLimitEvaluationService;
 import com.fps.svmes.services.FormNotificationConfigService;
-import com.fps.svmes.services.QcApprovalAssignmentService;
+import com.fps.svmes.services.FormSubmissionMutationGuard;
 import com.fps.svmes.services.QcFormDataService;
 import com.fps.svmes.services.QcFormTemplateService;
 import com.fps.svmes.services.QcSnapshotSubmissionService;
@@ -61,13 +63,13 @@ public class QcFormDataServiceImpl implements QcFormDataService {
     private final QcFormTemplateService qcFormTemplateService;
     private final ControlLimitEvaluationService controlLimitEvaluationService;
     private final ApprovalInfoGeneratorService approvalInfoGeneratorService;
-    private final QcApprovalAssignmentService qcApprovalAssignmentService;
     private final QcSnapshotSubmissionService qcSnapshotSubmissionService;
     private final MongoFormTemplateUtils mongoUtils;
     private final ApprovalInstanceService approvalInstanceService;
     private final FormNotificationConfigService formNotificationConfigService;
     private final FormSubmissionIndexManager formSubmissionIndexManager;
     private final SubmissionApprovalModelResolver approvalModelResolver;
+    private final FormSubmissionMutationGuard formSubmissionMutationGuard;
 
     @Override
     public Map<String, Object> insertFormData(String collectionName, Long userId, Map<String, Object> formData, boolean submitForApproval) {
@@ -155,10 +157,19 @@ public class QcFormDataServiceImpl implements QcFormDataService {
 
     @Override
     public Map<String, Object> editFormData(String collectionName, Long userId, String parentSubmissionId, Long formTemplateId,
+                                            Integer expectedFormSubmissionVersion, String lockToken, String lockSessionId,
                                             Map<String, Object> updatedData) {
-        Document parent = findSubmission(parentSubmissionId, collectionName);
-        requireState(parent, List.of(FormSubmissionState.SUBMITTED, FormSubmissionState.PENDING_REVISION),
-                "Only submitted or pending revision form entries can be edited.");
+        com.fps.svmes.dto.requests.FormSubmissionActionRequest actionRequest =
+                new com.fps.svmes.dto.requests.FormSubmissionActionRequest();
+        actionRequest.setSubmissionId(parentSubmissionId);
+        actionRequest.setCollectionName(collectionName);
+        actionRequest.setActorUserId(userId);
+        actionRequest.setExpectedFormSubmissionVersion(expectedFormSubmissionVersion);
+        actionRequest.setLockToken(lockToken);
+        actionRequest.setLockSessionId(lockSessionId);
+        var guardContext = formSubmissionMutationGuard.validateEditMutation(actionRequest);
+        Document parent = guardContext.target().submission();
+        collectionName = guardContext.target().collectionName();
         Date now = new Date();
 
         ApprovalModel parentModel = approvalModelResolver.resolveApprovalModel(parent);
@@ -253,12 +264,13 @@ public class QcFormDataServiceImpl implements QcFormDataService {
     }
 
     @Override
-    public Object getApprovalInstance(String submissionId, String collectionName) {
+    public ApprovalInstanceDTO getApprovalInstance(String submissionId, String collectionName) {
         Document submission = findSubmission(submissionId, collectionName);
         if (approvalModelResolver.resolveApprovalModel(submission) == ApprovalModel.LEGACY) {
-            return buildLegacyApprovalSummary(submission);
+            return buildLegacyApprovalSummary(submission, collectionName);
         }
-        return approvalInstanceService.getByFormSubmissionIncludingVoid(submissionId, collectionName);
+        ApprovalInstance instance = approvalInstanceService.getByFormSubmission(submissionId, collectionName);
+        return toApprovalInstanceDto(instance, submission, formTemplateName(parseTemplateId(collectionName)));
     }
 
     @Override
@@ -272,8 +284,11 @@ public class QcFormDataServiceImpl implements QcFormDataService {
     }
 
     @Override
-    public ApprovalInstance getApprovalInstanceById(String approvalInstanceId) {
-        return approvalInstanceService.getByIdIncludingVoid(approvalInstanceId);
+    public ApprovalInstanceDTO getApprovalInstanceById(String approvalInstanceId) {
+        ApprovalInstance instance = approvalInstanceService.getById(approvalInstanceId);
+        String collectionName = instance.getFormSubmissionCollectionName();
+        Document submission = findSubmission(instance.getFormSubmissionId(), collectionName);
+        return toApprovalInstanceDto(instance, submission, formTemplateName(parseTemplateId(collectionName)));
     }
 
     @Override
@@ -469,23 +484,21 @@ public class QcFormDataServiceImpl implements QcFormDataService {
                 .include("approvalSteps.resetCounter")
                 .include("versionNumber")
                 .include("isAlarmTriggered")
-                .include("filterSnapshot")
-                .include("status");
+                .include("filterSnapshot");
     }
 
     private ApprovalInstanceListItemDTO toApprovalInstanceListItemDto(ApprovalInstance instance, Document latestForm,
                                                                       boolean includeFormData, Map<Long, String> formTemplateNames) {
-        ApprovalInstanceFilterSnapshot snapshot = instance.getFilterSnapshot();
+        FormSubmissionSnapshotForFilter snapshot = instance.getFilterSnapshot();
         Long formTemplateId = snapshot == null ? asLong(instance.getFormTemplateId()) : snapshot.getFormTemplateId();
         ApprovalInstanceListItemDTO dto = new ApprovalInstanceListItemDTO();
-        dto.setSubmissionId(instance.getFormSubmissionId());
+        dto.setFormSubmissionId(instance.getFormSubmissionId());
         dto.setCollectionName(instance.getFormSubmissionCollectionName());
         dto.setFormTemplateId(formTemplateId);
         dto.setFormTemplateName(formTemplateId == null ? null : formTemplateNames.get(formTemplateId));
         dto.setFormSubmissionState(snapshot == null ? null : snapshot.getFormSubmissionState());
         dto.setApprovalInstanceId(instance.getId());
         dto.setApprovalTemplateId(instance.getApprovalTemplateId());
-        dto.setStatus(instance.getStatus());
         dto.setCurrentStepSequence(instance.getCurrentStepSequence());
         dto.setApprovalSteps(toApprovalInstanceListSteps(instance));
         dto.setApprovalInstanceVersion(nullToOne(instance.getVersionNumber()));
@@ -506,6 +519,45 @@ public class QcFormDataServiceImpl implements QcFormDataService {
         dto.setRelatedShifts(snapshot == null ? null : snapshot.getRelatedShifts());
         dto.setIsAlarmTriggered(snapshot == null ? instance.getIsAlarmTriggered() : snapshot.getIsAlarmTriggered());
         dto.setFormData(includeFormData && latestForm != null ? new HashMap<>(latestForm) : null);
+        return dto;
+    }
+
+    private ApprovalInstanceDTO toApprovalInstanceDto(ApprovalInstance instance, Document submission, String formTemplateName) {
+        FormSubmissionSnapshotForFilter snapshot = instance.getFilterSnapshot();
+        Long formTemplateId = snapshot == null ? asLong(instance.getFormTemplateId()) : snapshot.getFormTemplateId();
+
+        ApprovalInstanceDTO dto = new ApprovalInstanceDTO();
+        dto.setApprovalInstanceId(instance.getId());
+        dto.setApprovalTemplateId(instance.getApprovalTemplateId());
+        dto.setCurrentStepSequence(instance.getCurrentStepSequence());
+        dto.setApprovalSteps(toApprovalInstanceListSteps(instance));
+        dto.setActionLog(instance.getActionLog() == null ? List.of() : instance.getActionLog());
+        dto.setApprovalInstanceVersion(nullToOne(instance.getVersionNumber()));
+        dto.setCreatedAt(snapshot == null ? null : snapshot.getCreatedAt());
+        dto.setUpdatedAt(instance.getUpdatedAt());
+        dto.setCreatedBy(snapshot == null ? null : snapshot.getCreatedBy());
+        dto.setUpdatedBy(instance.getUpdatedBy());
+
+        dto.setFormSubmissionId(instance.getFormSubmissionId());
+        dto.setFormSubmissionState(snapshot == null ? approvalModelResolver.resolveLifecycleState(submission).dbValue() : snapshot.getFormSubmissionState());
+        dto.setFormSubmissionVersion(snapshot == null ? submission.getInteger("version", 1) : nullToOne(snapshot.getFormSubmissionVersion()));
+
+        dto.setCollectionName(instance.getFormSubmissionCollectionName());
+        dto.setFormTemplateId(formTemplateId);
+        dto.setFormTemplateName(formTemplateName);
+
+        dto.setRelatedInspectorIds(snapshot == null ? submission.get("related_inspector_ids") : snapshot.getRelatedInspectorIds());
+        dto.setRelatedInspectors(snapshot == null ? submission.get("related_inspectors") : snapshot.getRelatedInspectors());
+        dto.setRelatedProductIds(snapshot == null ? submission.get("related_product_ids") : snapshot.getRelatedProductIds());
+        dto.setRelatedProducts(snapshot == null ? submission.get("related_products") : snapshot.getRelatedProducts());
+        dto.setRelatedBatchIds(snapshot == null ? submission.get("related_batch_ids") : snapshot.getRelatedBatchIds());
+        dto.setRelatedBatches(snapshot == null ? submission.get("related_batches") : snapshot.getRelatedBatches());
+        dto.setRelatedTeamId(snapshot == null ? submission.get("related_team_id") : snapshot.getRelatedTeamId());
+        dto.setRelatedTeams(snapshot == null ? submission.get("related_teams") : snapshot.getRelatedTeams());
+        dto.setRelatedShiftId(snapshot == null ? submission.get("related_shift_id") : snapshot.getRelatedShiftId());
+        dto.setRelatedShifts(snapshot == null ? submission.get("related_shifts") : snapshot.getRelatedShifts());
+        dto.setIsAlarmTriggered(snapshot == null ? instance.getIsAlarmTriggered() : snapshot.getIsAlarmTriggered());
+        dto.setFormData(new HashMap<>(submission));
         return dto;
     }
 
@@ -553,22 +605,22 @@ public class QcFormDataServiceImpl implements QcFormDataService {
         return dto;
     }
 
-    private void createLegacyApprovalAssignment(String submissionId, String collectionName, Long formTemplateId, String templateName, String approvalType) {
-        QcApprovalAssignmentDTO assignmentDTO = new QcApprovalAssignmentDTO();
-        assignmentDTO.setSubmissionId(submissionId);
-        assignmentDTO.setQcFormTemplateId(formTemplateId);
-        assignmentDTO.setQcFormTemplateName(templateName);
-        assignmentDTO.setMongoCollection(collectionName);
-        assignmentDTO.setApprovalType(approvalType);
-        if ("flow_1".equals(approvalType)) {
-            assignmentDTO.setState("fully_approved");
-        } else if ("flow_3".equals(approvalType)) {
-            assignmentDTO.setState("pending_supervisor");
-        } else {
-            assignmentDTO.setState("pending_leader");
-        }
-        qcApprovalAssignmentService.insertIfNotExists(assignmentDTO);
-    }
+    // private void createLegacyApprovalAssignment(String submissionId, String collectionName, Long formTemplateId, String templateName, String approvalType) {
+    //     QcApprovalAssignmentDTO assignmentDTO = new QcApprovalAssignmentDTO();
+    //     assignmentDTO.setSubmissionId(submissionId);
+    //     assignmentDTO.setQcFormTemplateId(formTemplateId);
+    //     assignmentDTO.setQcFormTemplateName(templateName);
+    //     assignmentDTO.setMongoCollection(collectionName);
+    //     assignmentDTO.setApprovalType(approvalType);
+    //     if ("flow_1".equals(approvalType)) {
+    //         assignmentDTO.setState("fully_approved");
+    //     } else if ("flow_3".equals(approvalType)) {
+    //         assignmentDTO.setState("pending_supervisor");
+    //     } else {
+    //         assignmentDTO.setState("pending_leader");
+    //     }
+    //     qcApprovalAssignmentService.insertIfNotExists(assignmentDTO);
+    // }
 
     private List<Document> normalizeStepsForDraft(List<?> rawSteps) {
         List<Document> steps = toDocumentList(rawSteps);
@@ -582,16 +634,6 @@ public class QcFormDataServiceImpl implements QcFormDataService {
             }
         }
         return steps;
-    }
-
-    private void setSubmissionState(String submissionId, String collectionName, FormSubmissionState state) {
-        Update update = new Update()
-                .set("state", state.dbValue())
-                .set("updated_at", new Date());
-        UpdateResult result = mongoTemplate.updateFirst(submissionIdQuery(submissionId), update, collectionName);
-        if (result.getMatchedCount() == 0) {
-            throw new IllegalStateException("Form submission state update failed because submission was not found: " + submissionId);
-        }
     }
 
     /**
@@ -617,8 +659,8 @@ public class QcFormDataServiceImpl implements QcFormDataService {
     ) {
         // Compat: qc_approval_assignment row written for all submissions (including V2) to support old
         // frontend clients during the deployment window. Remove once the window is closed.
-        runCompatibilityStep("legacy_approval_assignment_failed", submissionId, collectionName, userId, warnings,
-                () -> createLegacyApprovalAssignment(submissionId, collectionName, formTemplateId, templateName, approvalType));
+        // runCompatibilityStep("legacy_approval_assignment_failed", submissionId, collectionName, userId, warnings,
+        //         () -> createLegacyApprovalAssignment(submissionId, collectionName, formTemplateId, templateName, approvalType));
         runCompatibilityStep("alert_evaluation_failed", submissionId, collectionName, userId, warnings,
                 () -> controlLimitEvaluationService.evaluateAndTriggerAlerts(formTemplateId, userId, formData, submissionId));
     }
@@ -632,8 +674,6 @@ public class QcFormDataServiceImpl implements QcFormDataService {
             Map<String, Object> newDoc,
             List<String> warnings
     ) {
-        runCompatibilityStep("legacy_approval_assignment_update_failed", newSubmissionId, collectionName, userId, warnings,
-                () -> qcApprovalAssignmentService.updateSubmissionId(parentSubmissionId, newSubmissionId));
         runCompatibilityStep("snapshot_cleanup_failed", newSubmissionId, collectionName, userId, warnings,
                 () -> qcSnapshotSubmissionService.deleteBySubmissionId(parentSubmissionId));
         runCompatibilityStep("alert_evaluation_failed", newSubmissionId, collectionName, userId, warnings,
@@ -708,24 +748,71 @@ public class QcFormDataServiceImpl implements QcFormDataService {
         return document;
     }
 
-    private void requireState(Document submission, List<FormSubmissionState> requiredStates, String message) {
-        if (!requiredStates.contains(approvalModelResolver.resolveLifecycleState(submission))) {
-            throw new IllegalStateException(message);
-        }
-    }
-
     /**
      * Returns a normalized legacy approval summary for the deprecated getApprovalInstance endpoint.
      * Wraps embedded approval_info with model/state context so callers get a consistent shape.
      */
-    private Map<String, Object> buildLegacyApprovalSummary(Document submission) {
-        Object approvalInfo = submission.get("approval_info");
-        Map<String, Object> summary = new HashMap<>();
-        summary.put("approvalModel", "legacy");
-        summary.put("submissionId", submission.getObjectId("_id").toString());
-        summary.put("state", approvalModelResolver.resolveLifecycleState(submission).dbValue());
-        summary.put("approvalSteps", approvalInfo instanceof List<?> list ? list : List.of());
-        return summary;
+    private ApprovalInstanceDTO buildLegacyApprovalSummary(Document submission, String collectionName) {
+        ApprovalInstanceDTO dto = new ApprovalInstanceDTO();
+        dto.setFormSubmissionId(submission.getObjectId("_id").toString());
+        dto.setFormSubmissionState(approvalModelResolver.resolveLifecycleState(submission).dbValue());
+        dto.setFormSubmissionVersion(submission.getInteger("version", 1));
+        dto.setCollectionName(collectionName);
+        dto.setFormTemplateId(parseTemplateId(collectionName));
+        dto.setFormTemplateName(formTemplateName(dto.getFormTemplateId()));
+        dto.setApprovalSteps(toLegacyApprovalSteps(submission.get("approval_info")));
+        dto.setFormData(new HashMap<>(submission));
+        return dto;
+    }
+
+    private String formTemplateName(Long formTemplateId) {
+        if (formTemplateId == null) {
+            return null;
+        }
+        QcFormTemplateDTO template = qcFormTemplateService.getTemplateById(formTemplateId);
+        return template == null ? null : template.getName();
+    }
+
+    private List<ApprovalInstanceListStepDTO> toLegacyApprovalSteps(Object rawApprovalInfo) {
+        if (!(rawApprovalInfo instanceof List<?> rawSteps) || rawSteps.isEmpty()) {
+            return List.of();
+        }
+
+        List<ApprovalInstanceListStepDTO> steps = new ArrayList<>();
+        int sequence = 1;
+        for (Object rawStep : rawSteps) {
+            if (!(rawStep instanceof Map<?, ?> rawMap)) {
+                continue;
+            }
+
+            String role = stringValue(rawMap.get("role"));
+            if ("submitter".equals(role) || "archive".equals(role)) {
+                continue;
+            }
+
+            ApprovalInstanceListStepDTO dto = new ApprovalInstanceListStepDTO();
+            dto.setSequence(sequence++);
+            dto.setStepName(stringValue(rawMap.get("label")));
+            dto.setRequiredType("role");
+            dto.setRequiredRoleId(role);
+            dto.setStepState(legacyStepState(stringValue(rawMap.get("status"))));
+            dto.setResetCounter(0);
+            steps.add(dto);
+        }
+        return steps;
+    }
+
+    private ApprovalStepState legacyStepState(String status) {
+        return switch (status == null ? "" : status) {
+            case "completed" -> ApprovalStepState.APPROVED;
+            case "pending" -> ApprovalStepState.IN_PROGRESS;
+            case "not_started" -> ApprovalStepState.PENDING;
+            default -> ApprovalStepState.PENDING;
+        };
+    }
+
+    private String stringValue(Object value) {
+        return value == null ? null : String.valueOf(value);
     }
 
     private Query submissionIdQuery(String submissionId) {

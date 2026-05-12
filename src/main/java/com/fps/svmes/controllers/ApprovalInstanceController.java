@@ -2,8 +2,10 @@ package com.fps.svmes.controllers;
 
 import com.fps.shared.dto.responses.ResponseResult;
 import com.fps.shared.dto.responses.ResponseStatus;
+import com.fps.svmes.constants.FormSubmissionLockHeaders;
 import com.fps.svmes.dto.PagedResultDTO;
-import com.fps.svmes.dto.dtos.qcForm.ApprovalInstanceListItemDTO;
+import com.fps.svmes.dto.dtos.approval.ApprovalInstanceDTO;
+import com.fps.svmes.dto.dtos.approval.ApprovalInstanceListItemDTO;
 import com.fps.svmes.dto.requests.ApprovalFlowEditRequest;
 import com.fps.svmes.dto.requests.ApprovalInstanceQueryRequest;
 import com.fps.svmes.dto.requests.FormSubmissionActionRequest;
@@ -106,14 +108,14 @@ public class ApprovalInstanceController {
     @GetMapping("/approval-instance")
     @Operation(
             summary = "Get approval instance by form submission id and collection",
-            description = "Returns the approval instance for a form submission, including voided approval instances when needed for audit history."
+            description = "Returns the approval instance for a form submission."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Approval instance returned successfully"),
             @ApiResponse(responseCode = "404", description = "Approval instance was not found"),
             @ApiResponse(responseCode = "500", description = "Unexpected error retrieving approval instance")
     })
-    public ResponseEntity<ResponseResult<Object>> getApprovalInstance(
+    public ResponseEntity<ResponseResult<ApprovalInstanceDTO>> getApprovalInstance(
             @RequestParam String submissionId,
             @RequestParam String collectionName) {
         try {
@@ -129,14 +131,14 @@ public class ApprovalInstanceController {
     @GetMapping("/approval-instance/{approvalInstanceId}")
     @Operation(
             summary = "Get approval instance by id",
-            description = "Returns the full approval instance document by approval-instance id, including voided approval instances when needed for audit history."
+            description = "Returns the full approval instance document by approval-instance id."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Approval instance returned successfully"),
             @ApiResponse(responseCode = "404", description = "Approval instance was not found"),
             @ApiResponse(responseCode = "500", description = "Unexpected error retrieving approval instance")
     })
-    public ResponseEntity<ResponseResult<Object>> getApprovalInstanceById(@PathVariable String approvalInstanceId) {
+    public ResponseEntity<ResponseResult<ApprovalInstanceDTO>> getApprovalInstanceById(@PathVariable String approvalInstanceId) {
         try {
             return ResponseResult.of(qcFormDataService.getApprovalInstanceById(approvalInstanceId), ResponseStatus.SUCCESS);
         } catch (ApprovalInstanceException e) {
@@ -181,8 +183,13 @@ public class ApprovalInstanceController {
             @ApiResponse(responseCode = "409", description = "Actor does not match the current step, state is invalid, or submitted versions are stale"),
             @ApiResponse(responseCode = "500", description = "Unexpected error approving form submission")
     })
-    public ResponseEntity<ResponseResult<String>> approve(@Valid @RequestBody FormSubmissionActionRequest request) {
+    public ResponseEntity<ResponseResult<String>> approve(
+            @RequestHeader(FormSubmissionLockHeaders.LOCK_TOKEN) String lockToken,
+            @RequestHeader(FormSubmissionLockHeaders.LOCK_SESSION_ID) String lockSessionId,
+            @Valid @RequestBody FormSubmissionActionRequest request) {
         try {
+            request.setLockToken(lockToken);
+            request.setLockSessionId(lockSessionId);
             approvalInstanceService.approve(request);
             return ResponseResult.of("Form submission approved successfully", ResponseStatus.SUCCESS);
         } catch (IllegalStateException | ApprovalInstanceException e) {
@@ -203,8 +210,13 @@ public class ApprovalInstanceController {
             @ApiResponse(responseCode = "409", description = "No next step, actor mismatch, invalid state, or stale submitted versions"),
             @ApiResponse(responseCode = "500", description = "Unexpected error forwarding form submission")
     })
-    public ResponseEntity<ResponseResult<String>> forward(@Valid @RequestBody FormSubmissionActionRequest request) {
+    public ResponseEntity<ResponseResult<String>> forward(
+            @RequestHeader(FormSubmissionLockHeaders.LOCK_TOKEN) String lockToken,
+            @RequestHeader(FormSubmissionLockHeaders.LOCK_SESSION_ID) String lockSessionId,
+            @Valid @RequestBody FormSubmissionActionRequest request) {
         try {
+            request.setLockToken(lockToken);
+            request.setLockSessionId(lockSessionId);
             approvalInstanceService.forward(request);
             return ResponseResult.of("Form submission forwarded to next approval step", ResponseStatus.SUCCESS);
         } catch (IllegalStateException | ApprovalInstanceException e) {
@@ -225,8 +237,13 @@ public class ApprovalInstanceController {
             @ApiResponse(responseCode = "409", description = "Invalid approval state or stale submitted versions"),
             @ApiResponse(responseCode = "500", description = "Unexpected error requesting correction")
     })
-    public ResponseEntity<ResponseResult<String>> requestCorrection(@Valid @RequestBody FormSubmissionActionRequest request) {
+    public ResponseEntity<ResponseResult<String>> requestCorrection(
+            @RequestHeader(FormSubmissionLockHeaders.LOCK_TOKEN) String lockToken,
+            @RequestHeader(FormSubmissionLockHeaders.LOCK_SESSION_ID) String lockSessionId,
+            @Valid @RequestBody FormSubmissionActionRequest request) {
         try {
+            request.setLockToken(lockToken);
+            request.setLockSessionId(lockSessionId);
             approvalInstanceService.requestCorrection(request);
             return ResponseResult.of("Correction requested successfully", ResponseStatus.SUCCESS);
         } catch (IllegalStateException | ApprovalInstanceException e) {
@@ -281,8 +298,13 @@ public class ApprovalInstanceController {
             @ApiResponse(responseCode = "409", description = "Approval flow cannot be edited in the current state"),
             @ApiResponse(responseCode = "500", description = "Unexpected error editing approval flow")
     })
-    public ResponseEntity<ResponseResult<Document>> editApprovalFlow(@Valid @RequestBody ApprovalFlowEditRequest request) {
+    public ResponseEntity<ResponseResult<Document>> editApprovalFlow(
+            @RequestHeader(FormSubmissionLockHeaders.LOCK_TOKEN) String lockToken,
+            @RequestHeader(FormSubmissionLockHeaders.LOCK_SESSION_ID) String lockSessionId,
+            @Valid @RequestBody ApprovalFlowEditRequest request) {
         try {
+            request.setLockToken(lockToken);
+            request.setLockSessionId(lockSessionId);
             return ResponseResult.of(qcFormDataService.editApprovalFlow(request), ResponseStatus.SUCCESS);
         } catch (IllegalStateException | ApprovalInstanceException e) {
             return ResponseResult.fail(e.getMessage(), ResponseStatus.CONFLICT, e);

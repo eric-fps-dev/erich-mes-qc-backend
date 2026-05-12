@@ -10,16 +10,12 @@ import java.util.Optional;
 
 @Repository
 public interface ApprovalInstanceRepository extends MongoRepository<ApprovalInstance, String> {
-    Optional<ApprovalInstance> findByFormSubmissionIdAndFormSubmissionCollectionNameAndStatus(
-            String formSubmissionId,
-            String formSubmissionCollectionName,
-            Integer status
-    );
-
     Optional<ApprovalInstance> findByFormSubmissionIdAndFormSubmissionCollectionName(
             String formSubmissionId,
             String formSubmissionCollectionName
     );
+
+    Optional<ApprovalInstance> findByFormSubmissionId(String formSubmissionId);
 
     List<ApprovalInstance> findByFormSubmissionCollectionNameAndFormSubmissionIdIn(
             String formSubmissionCollectionName,

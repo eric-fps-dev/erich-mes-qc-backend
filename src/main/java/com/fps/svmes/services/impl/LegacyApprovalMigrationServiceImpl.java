@@ -7,7 +7,7 @@ import com.fps.svmes.enums.form.ApprovalModel;
 import com.fps.svmes.enums.form.FormSubmissionState;
 import com.fps.svmes.models.nosql.approval.ApprovalActionLog;
 import com.fps.svmes.models.nosql.approval.ApprovalInstance;
-import com.fps.svmes.models.nosql.approval.ApprovalInstanceFilterSnapshot;
+import com.fps.svmes.models.nosql.approval.FormSubmissionSnapshotForFilter;
 import com.fps.svmes.models.nosql.approval.ApprovalInstanceStep;
 import com.fps.svmes.repositories.mongoRepo.ApprovalInstanceRepository;
 import com.fps.svmes.services.LegacyApprovalMigrationService;
@@ -137,7 +137,6 @@ public class LegacyApprovalMigrationServiceImpl implements LegacyApprovalMigrati
         instance.setActionLog(actionLog);
         instance.setVersionNumber(1);
         instance.setFilterSnapshot(buildFilterSnapshot(doc, formTemplateId, formState));
-        instance.setStatus(1);
 
         Date docCreatedAt = doc.getDate("created_at");
         instance.setCreatedAt(docCreatedAt != null ? docCreatedAt.toInstant() : Instant.now());
@@ -283,8 +282,8 @@ public class LegacyApprovalMigrationServiceImpl implements LegacyApprovalMigrati
 
     // ── filter snapshot ─────────────────────────────────────────────────────
 
-    private ApprovalInstanceFilterSnapshot buildFilterSnapshot(Document doc, Long formTemplateId, FormSubmissionState formState) {
-        ApprovalInstanceFilterSnapshot snapshot = new ApprovalInstanceFilterSnapshot();
+    private FormSubmissionSnapshotForFilter buildFilterSnapshot(Document doc, Long formTemplateId, FormSubmissionState formState) {
+        FormSubmissionSnapshotForFilter snapshot = new FormSubmissionSnapshotForFilter();
         snapshot.setFormTemplateId(formTemplateId);
         snapshot.setFormSubmissionState(formState.dbValue());
         snapshot.setFormSubmissionVersion(doc.get("version") instanceof Number n ? n.intValue() : 1);

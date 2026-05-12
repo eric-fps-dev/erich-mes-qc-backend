@@ -79,4 +79,10 @@ public class FormSubmissionActionRequest {
     @Schema(description = "Optional. When true, suppress approval action-log writes and approval-step mutation for review entry/exit guard operations.", example = "false")
     private Boolean omitApprovalActionLog;
 
+    @Schema(description = "Active form-submission lock token supplied via request header.", accessMode = Schema.AccessMode.READ_ONLY)
+    private String lockToken;
+
+    @Schema(description = "Active form-submission lock session id supplied via request header.", accessMode = Schema.AccessMode.READ_ONLY)
+    private String lockSessionId;
+
 }
