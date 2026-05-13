@@ -15,5 +15,5 @@ public interface FormSubmissionLockService {
 
     FormSubmissionLockResponse getLockStatus(FormSubmissionLockStatusRequest request);
 
-    void validateActiveLockOwnership(String submissionId, String collectionName, Long actorUserId, String sessionId, String lockToken);
+    void validateActiveLockOwnership(String submissionId, String collectionName, Long actorUserId, String lockToken);
 }

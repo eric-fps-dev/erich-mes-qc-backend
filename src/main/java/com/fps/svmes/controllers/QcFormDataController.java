@@ -93,7 +93,7 @@ public class QcFormDataController {
             @RequestParam("templateId") Long formTemplateId,
             @RequestParam("expectedFormSubmissionVersion") Integer expectedFormSubmissionVersion,
             @RequestHeader(FormSubmissionLockHeaders.LOCK_TOKEN) String lockToken,
-            @RequestHeader(FormSubmissionLockHeaders.LOCK_SESSION_ID) String lockSessionId,
+            @RequestHeader(name = FormSubmissionLockHeaders.LOCK_SESSION_ID, required = false) String lockSessionId,
             @RequestBody Map<String, Object> updatedData) {
         try {
             return ResponseResult.of(
@@ -131,7 +131,7 @@ public class QcFormDataController {
     })
     public ResponseEntity<ResponseResult<String>> deleteFormSubmission(
             @RequestHeader(FormSubmissionLockHeaders.LOCK_TOKEN) String lockToken,
-            @RequestHeader(FormSubmissionLockHeaders.LOCK_SESSION_ID) String lockSessionId,
+            @RequestHeader(name = FormSubmissionLockHeaders.LOCK_SESSION_ID, required = false) String lockSessionId,
             @Valid @RequestBody FormSubmissionActionRequest request) {
         try {
             request.setLockToken(lockToken);

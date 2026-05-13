@@ -55,10 +55,14 @@ public class FormSubmissionLockServiceImpl implements FormSubmissionLockService 
                 return buildResponse(existing, target.submissionId(), target.collectionName(), FormSubmissionLockStatus.ALREADY_OWNED,
                         existing.getLockPurpose(), true, false);
             }
-            if (Objects.equals(existing.getLockedByUserId(), request.getActorUserId()) && Boolean.TRUE.equals(request.getTakeOverExistingLock())) {
-                FormSubmissionLock takenOver = takeOverLock(existing, request, target.collectionName(), now);
-                return buildResponse(takenOver, target.submissionId(), target.collectionName(), FormSubmissionLockStatus.ACQUIRED,
-                        takenOver.getLockPurpose(), true, false);
+            if (sameUser(existing, request.getActorUserId())) {
+                if (Boolean.TRUE.equals(request.getTakeOverExistingLock())) {
+                    FormSubmissionLock takenOver = takeOverLock(existing, request, target.collectionName(), now);
+                    return buildResponse(takenOver, target.submissionId(), target.collectionName(), FormSubmissionLockStatus.ACQUIRED,
+                            takenOver.getLockPurpose(), true, false);
+                }
+                return buildResponse(existing, target.submissionId(), target.collectionName(), FormSubmissionLockStatus.ALREADY_OWNED,
+                        existing.getLockPurpose(), true, false);
             }
             return buildResponse(existing, target.submissionId(), target.collectionName(), FormSubmissionLockStatus.LOCKED_BY_OTHER,
                     existing.getLockPurpose(), false, true);
@@ -75,6 +79,10 @@ public class FormSubmissionLockServiceImpl implements FormSubmissionLockService 
                     return buildResponse(current, target.submissionId(), target.collectionName(), FormSubmissionLockStatus.ALREADY_OWNED,
                             current.getLockPurpose(), true, false);
                 }
+                if (sameUser(current, request.getActorUserId())) {
+                    return buildResponse(current, target.submissionId(), target.collectionName(), FormSubmissionLockStatus.ALREADY_OWNED,
+                            current.getLockPurpose(), true, false);
+                }
                 return buildResponse(current, target.submissionId(), target.collectionName(), FormSubmissionLockStatus.LOCKED_BY_OTHER,
                         current.getLockPurpose(), false, true);
             }
@@ -88,12 +96,14 @@ public class FormSubmissionLockServiceImpl implements FormSubmissionLockService 
         Query query = new Query(Criteria.where("submissionId").is(request.getSubmissionId())
                 .and("collectionName").is(request.getCollectionName())
                 .and("lockedByUserId").is(request.getActorUserId())
-                .and("sessionId").is(request.getSessionId())
                 .and("lockToken").is(request.getLockToken())
                 .and("expiresAt").gt(now));
         Update update = new Update()
                 .set("expiresAt", expiryFrom(now))
                 .set("updatedAt", now);
+        if (request.getSessionId() != null && !request.getSessionId().isBlank()) {
+            update.set("sessionId", request.getSessionId());
+        }
         FormSubmissionLock renewed = mongoTemplate.findAndModify(query, update,
                 FindAndModifyOptions.options().returnNew(true), FormSubmissionLock.class);
         if (renewed == null) {
@@ -110,7 +120,6 @@ public class FormSubmissionLockServiceImpl implements FormSubmissionLockService 
         Query query = new Query(Criteria.where("submissionId").is(request.getSubmissionId())
                 .and("collectionName").is(request.getCollectionName())
                 .and("lockedByUserId").is(request.getActorUserId())
-                .and("sessionId").is(request.getSessionId())
                 .and("lockToken").is(request.getLockToken()));
         FormSubmissionLock released = mongoTemplate.findAndRemove(query, FormSubmissionLock.class);
         if (released == null) {
@@ -138,7 +147,8 @@ public class FormSubmissionLockServiceImpl implements FormSubmissionLockService 
             return buildResponse(null, target.submissionId(), target.collectionName(), FormSubmissionLockStatus.NOT_LOCKED,
                     request.getLockPurpose(), false, false);
         }
-        if (request.getSessionId() != null && ownedBy(existing, request.getActorUserId(), request.getSessionId())) {
+        if ((request.getSessionId() != null && ownedBy(existing, request.getActorUserId(), request.getSessionId()))
+                || sameUser(existing, request.getActorUserId())) {
             return buildResponse(existing, target.submissionId(), target.collectionName(), FormSubmissionLockStatus.ALREADY_OWNED,
                     existing.getLockPurpose(), true, false);
         }
@@ -147,12 +157,11 @@ public class FormSubmissionLockServiceImpl implements FormSubmissionLockService 
     }
 
     @Override
-    public void validateActiveLockOwnership(String submissionId, String collectionName, Long actorUserId, String sessionId, String lockToken) {
+    public void validateActiveLockOwnership(String submissionId, String collectionName, Long actorUserId, String lockToken) {
         Date now = Date.from(Instant.now());
         Query query = new Query(Criteria.where("submissionId").is(submissionId)
                 .and("collectionName").is(collectionName)
                 .and("lockedByUserId").is(actorUserId)
-                .and("sessionId").is(sessionId)
                 .and("lockToken").is(lockToken)
                 .and("expiresAt").gt(now));
         boolean valid = mongoTemplate.exists(query, FormSubmissionLock.class);
@@ -187,17 +196,25 @@ public class FormSubmissionLockServiceImpl implements FormSubmissionLockService 
                                       String canonicalCollectionName,
                                       Date now,
                                       String newToken) {
+        String sessionId = normalizedSessionId(request.getSessionId(), newToken);
         return new Update()
                 .setOnInsert("submissionId", request.getSubmissionId())
                 .setOnInsert("collectionName", canonicalCollectionName)
                 .setOnInsert("createdAt", now)
                 .set("lockToken", newToken)
-                .set("sessionId", request.getSessionId())
+                .set("sessionId", sessionId)
                 .set("lockedByUserId", request.getActorUserId())
                 .set("lockPurpose", request.getLockPurpose())
                 .set("actorRoleIdsAtAcquire", sanitizeRoleIds(request.getActorRoleIds()))
                 .set("expiresAt", expiryFrom(now))
                 .set("updatedAt", now);
+    }
+
+    private String normalizedSessionId(String sessionId, String fallback) {
+        if (sessionId == null || sessionId.isBlank()) {
+            return fallback;
+        }
+        return sessionId;
     }
 
     private List<String> sanitizeRoleIds(List<String> actorRoleIds) {
@@ -224,6 +241,10 @@ public class FormSubmissionLockServiceImpl implements FormSubmissionLockService 
         return lock != null
                 && Objects.equals(lock.getLockedByUserId(), actorUserId)
                 && Objects.equals(lock.getSessionId(), sessionId);
+    }
+
+    private boolean sameUser(FormSubmissionLock lock, Long actorUserId) {
+        return lock != null && Objects.equals(lock.getLockedByUserId(), actorUserId);
     }
 
     private Date expiryFrom(Date now) {

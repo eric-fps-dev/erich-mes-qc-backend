@@ -148,7 +148,7 @@ public class QcTaskSubmissionLogsController {
             @RequestParam Long actorUserId,
             @RequestParam Integer expectedFormSubmissionVersion,
             @RequestHeader(FormSubmissionLockHeaders.LOCK_TOKEN) String lockToken,
-            @RequestHeader(FormSubmissionLockHeaders.LOCK_SESSION_ID) String lockSessionId) {
+            @RequestHeader(name = FormSubmissionLockHeaders.LOCK_SESSION_ID, required = false) String lockSessionId) {
         try {
             // determine the form_template_{id}_{YYYYMM} collection to look for according to createdAt example createdAt string 2025-02-05 19:31:58
             String collectionName = "form_template_" + qcFormTemplateId + "_" + createdAt.substring(0, 7).replace("-", "");

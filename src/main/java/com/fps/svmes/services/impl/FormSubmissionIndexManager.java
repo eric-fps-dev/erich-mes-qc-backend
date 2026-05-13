@@ -1,5 +1,6 @@
 package com.fps.svmes.services.impl;
 
+import com.fps.svmes.models.nosql.FormSubmissionLock;
 import com.fps.svmes.models.nosql.approval.ApprovalInstance;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
@@ -33,6 +34,7 @@ public class FormSubmissionIndexManager {
     @PostConstruct
     public void ensureExistingIndexes() {
         ensureApprovalInstanceIndexes();
+        ensureFormSubmissionLockIndexes();
         for (String collectionName : mongoTemplate.getCollectionNames()) {
             if (FORM_COLLECTION_PATTERN.matcher(collectionName).matches()) {
                 ensureFormSubmissionIndexes(collectionName);
@@ -62,35 +64,69 @@ public class FormSubmissionIndexManager {
     // 2. approval list filters using filterSnapshot fields
     private void ensureApprovalInstanceIndexes() {
         IndexOperations indexOps = mongoTemplate.indexOps(ApprovalInstance.class);
+        dropApprovalInstanceLegacyIndexes(indexOps);
         indexOps.ensureIndex(new Index().on("formSubmissionCollectionName", Sort.Direction.ASC).on("formSubmissionId", Sort.Direction.ASC));
-        indexOps.ensureIndex(new Index().on("status", Sort.Direction.ASC)
+        indexOps.ensureIndex(new Index().on("formSubmissionCollectionName", Sort.Direction.ASC)
+                .on("approvalTemplateId", Sort.Direction.ASC));
+        indexOps.ensureIndex(new Index().on("approvalTemplateId", Sort.Direction.ASC)
                 .on("filterSnapshot.formSubmissionState", Sort.Direction.ASC)
                 .on("filterSnapshot.createdAt", Sort.Direction.DESC));
-        indexOps.ensureIndex(new Index().on("status", Sort.Direction.ASC)
-                .on("approvalTemplateId", Sort.Direction.ASC)
+        indexOps.ensureIndex(new Index().on("filterSnapshot.formTemplateId", Sort.Direction.ASC)
                 .on("filterSnapshot.formSubmissionState", Sort.Direction.ASC)
                 .on("filterSnapshot.createdAt", Sort.Direction.DESC));
-        indexOps.ensureIndex(new Index().on("status", Sort.Direction.ASC)
-                .on("filterSnapshot.formTemplateId", Sort.Direction.ASC)
-                .on("filterSnapshot.formSubmissionState", Sort.Direction.ASC)
+        indexOps.ensureIndex(new Index().on("filterSnapshot.createdBy", Sort.Direction.ASC)
                 .on("filterSnapshot.createdAt", Sort.Direction.DESC));
-        indexOps.ensureIndex(new Index().on("status", Sort.Direction.ASC)
-                .on("filterSnapshot.createdBy", Sort.Direction.ASC)
+        indexOps.ensureIndex(new Index().on("filterSnapshot.relatedInspectorIds", Sort.Direction.ASC)
                 .on("filterSnapshot.createdAt", Sort.Direction.DESC));
-        indexOps.ensureIndex(new Index().on("status", Sort.Direction.ASC)
-                .on("filterSnapshot.relatedInspectorIds", Sort.Direction.ASC)
+        indexOps.ensureIndex(new Index().on("filterSnapshot.relatedProductIds", Sort.Direction.ASC)
                 .on("filterSnapshot.createdAt", Sort.Direction.DESC));
-        indexOps.ensureIndex(new Index().on("status", Sort.Direction.ASC)
-                .on("filterSnapshot.relatedProductIds", Sort.Direction.ASC)
+        indexOps.ensureIndex(new Index().on("filterSnapshot.relatedBatchIds", Sort.Direction.ASC)
                 .on("filterSnapshot.createdAt", Sort.Direction.DESC));
-        indexOps.ensureIndex(new Index().on("status", Sort.Direction.ASC)
-                .on("filterSnapshot.relatedBatchIds", Sort.Direction.ASC)
+        indexOps.ensureIndex(new Index().on("filterSnapshot.relatedTeamId", Sort.Direction.ASC)
                 .on("filterSnapshot.createdAt", Sort.Direction.DESC));
-        indexOps.ensureIndex(new Index().on("status", Sort.Direction.ASC)
-                .on("filterSnapshot.relatedTeamId", Sort.Direction.ASC)
+        indexOps.ensureIndex(new Index().on("filterSnapshot.relatedShiftId", Sort.Direction.ASC)
                 .on("filterSnapshot.createdAt", Sort.Direction.DESC));
-        indexOps.ensureIndex(new Index().on("status", Sort.Direction.ASC)
-                .on("filterSnapshot.relatedShiftId", Sort.Direction.ASC)
+        indexOps.ensureIndex(new Index().on("filterSnapshot.isAlarmTriggered", Sort.Direction.ASC)
                 .on("filterSnapshot.createdAt", Sort.Direction.DESC));
+        indexOps.ensureIndex(new Index().on("approvalSteps.stepState", Sort.Direction.ASC)
+                .on("approvalSteps.requiredUserId", Sort.Direction.ASC));
+        indexOps.ensureIndex(new Index().on("approvalSteps.stepState", Sort.Direction.ASC)
+                .on("approvalSteps.requiredRoleId", Sort.Direction.ASC));
+    }
+
+    private void dropApprovalInstanceLegacyIndexes(IndexOperations indexOps) {
+        for (String indexName : List.of(
+                "formSubmissionCollectionName_1_approvalTemplateId_1_state_1",
+                "status_1_approvalTemplateId_1_filterSnapshot.formSubmissionState_1_filterSnapshot.createdAt_-1",
+                "status_1_filterSnapshot.formTemplateId_1_filterSnapshot.createdAt_-1",
+                "status_1_filterSnapshot.createdBy_1_filterSnapshot.createdAt_-1",
+                "status_1_filterSnapshot.relatedInspectorIds_1_filterSnapshot.createdAt_-1",
+                "status_1_filterSnapshot.relatedProductIds_1_filterSnapshot.createdAt_-1",
+                "status_1_filterSnapshot.relatedBatchIds_1_filterSnapshot.createdAt_-1",
+                "status_1_filterSnapshot.relatedTeamId_1_filterSnapshot.createdAt_-1",
+                "status_1_filterSnapshot.relatedShiftId_1_filterSnapshot.createdAt_-1",
+                "status_1_filterSnapshot.formSubmissionState_1_filterSnapshot.createdAt_-1",
+                "status_1_filterSnapshot.formTemplateId_1_filterSnapshot.formSubmissionState_1_filterSnapshot.createdAt_-1"
+        )) {
+            try {
+                indexOps.dropIndex(indexName);
+                log.info("Dropped legacy approval-instance index {}", indexName);
+            } catch (RuntimeException e) {
+                log.debug("Approval-instance index {} not dropped: {}", indexName, e.getMessage());
+            }
+        }
+    }
+
+    private void ensureFormSubmissionLockIndexes() {
+        IndexOperations indexOps = mongoTemplate.indexOps(FormSubmissionLock.class);
+        indexOps.ensureIndex(new Index()
+                .on("submissionId", Sort.Direction.ASC)
+                .on("collectionName", Sort.Direction.ASC)
+                .unique()
+                .named("ux_submission_collection"));
+        indexOps.ensureIndex(new Index()
+                .on("expiresAt", Sort.Direction.ASC)
+                .expire(0)
+                .named("idx_submission_lock_expires_at"));
     }
 }

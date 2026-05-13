@@ -185,7 +185,7 @@ public class ApprovalInstanceController {
     })
     public ResponseEntity<ResponseResult<String>> approve(
             @RequestHeader(FormSubmissionLockHeaders.LOCK_TOKEN) String lockToken,
-            @RequestHeader(FormSubmissionLockHeaders.LOCK_SESSION_ID) String lockSessionId,
+            @RequestHeader(name = FormSubmissionLockHeaders.LOCK_SESSION_ID, required = false) String lockSessionId,
             @Valid @RequestBody FormSubmissionActionRequest request) {
         try {
             request.setLockToken(lockToken);
@@ -212,7 +212,7 @@ public class ApprovalInstanceController {
     })
     public ResponseEntity<ResponseResult<String>> forward(
             @RequestHeader(FormSubmissionLockHeaders.LOCK_TOKEN) String lockToken,
-            @RequestHeader(FormSubmissionLockHeaders.LOCK_SESSION_ID) String lockSessionId,
+            @RequestHeader(name = FormSubmissionLockHeaders.LOCK_SESSION_ID, required = false) String lockSessionId,
             @Valid @RequestBody FormSubmissionActionRequest request) {
         try {
             request.setLockToken(lockToken);
@@ -239,7 +239,7 @@ public class ApprovalInstanceController {
     })
     public ResponseEntity<ResponseResult<String>> requestCorrection(
             @RequestHeader(FormSubmissionLockHeaders.LOCK_TOKEN) String lockToken,
-            @RequestHeader(FormSubmissionLockHeaders.LOCK_SESSION_ID) String lockSessionId,
+            @RequestHeader(name = FormSubmissionLockHeaders.LOCK_SESSION_ID, required = false) String lockSessionId,
             @Valid @RequestBody FormSubmissionActionRequest request) {
         try {
             request.setLockToken(lockToken);
@@ -300,7 +300,7 @@ public class ApprovalInstanceController {
     })
     public ResponseEntity<ResponseResult<Document>> editApprovalFlow(
             @RequestHeader(FormSubmissionLockHeaders.LOCK_TOKEN) String lockToken,
-            @RequestHeader(FormSubmissionLockHeaders.LOCK_SESSION_ID) String lockSessionId,
+            @RequestHeader(name = FormSubmissionLockHeaders.LOCK_SESSION_ID, required = false) String lockSessionId,
             @Valid @RequestBody ApprovalFlowEditRequest request) {
         try {
             request.setLockToken(lockToken);

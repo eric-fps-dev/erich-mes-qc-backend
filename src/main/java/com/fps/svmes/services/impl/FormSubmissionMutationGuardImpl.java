@@ -30,7 +30,7 @@ public class FormSubmissionMutationGuardImpl implements FormSubmissionMutationGu
         guard(mutationAccessService.canAccess(target, request.getActorUserId(), request.getActorRoleId(), null, FormSubmissionLockPurpose.EDIT),
                 "Only submitted or pending revision form entries can be edited.");
         validateExpectedFormVersion(target.submission(), request.getExpectedFormSubmissionVersion());
-        lockService.validateActiveLockOwnership(target.submissionId(), target.collectionName(), request.getActorUserId(), request.getLockSessionId(), request.getLockToken());
+        lockService.validateActiveLockOwnership(target.submissionId(), target.collectionName(), request.getActorUserId(), request.getLockToken());
         return new FormSubmissionMutationGuardContext(target, approvalModelResolver.resolveLifecycleState(target.submission()));
     }
 
@@ -40,7 +40,7 @@ public class FormSubmissionMutationGuardImpl implements FormSubmissionMutationGu
         guard(mutationAccessService.canAccess(target, request.getActorUserId(), request.getActorRoleId(), null, FormSubmissionLockPurpose.DELETE),
                 "Form submission cannot be deleted in its current state or by this actor.");
         validateExpectedFormVersion(target.submission(), request.getExpectedFormSubmissionVersion());
-        lockService.validateActiveLockOwnership(target.submissionId(), target.collectionName(), request.getActorUserId(), request.getLockSessionId(), request.getLockToken());
+        lockService.validateActiveLockOwnership(target.submissionId(), target.collectionName(), request.getActorUserId(), request.getLockToken());
         return new FormSubmissionMutationGuardContext(target, approvalModelResolver.resolveLifecycleState(target.submission()));
     }
 
@@ -50,7 +50,7 @@ public class FormSubmissionMutationGuardImpl implements FormSubmissionMutationGu
         guard(mutationAccessService.canAccess(target, request.getActorUserId(), request.getActorRoleId(), null, FormSubmissionLockPurpose.APPROVAL_ACTION),
                 "Current user is not allowed to act on this approval step.");
         validateExpectedFormVersion(target.submission(), request.getExpectedFormSubmissionVersion());
-        lockService.validateActiveLockOwnership(target.submissionId(), target.collectionName(), request.getActorUserId(), request.getLockSessionId(), request.getLockToken());
+        lockService.validateActiveLockOwnership(target.submissionId(), target.collectionName(), request.getActorUserId(), request.getLockToken());
         return new FormSubmissionMutationGuardContext(target, approvalModelResolver.resolveLifecycleState(target.submission()));
     }
 
@@ -60,7 +60,7 @@ public class FormSubmissionMutationGuardImpl implements FormSubmissionMutationGu
         guard(mutationAccessService.canAccess(target, request.getUserId(), null, null, FormSubmissionLockPurpose.WORKFLOW_ACTION),
                 "Current user is not allowed to edit this approval flow.");
         validateExpectedFormVersion(target.submission(), request.getExpectedFormSubmissionVersion());
-        lockService.validateActiveLockOwnership(target.submissionId(), target.collectionName(), request.getUserId(), request.getLockSessionId(), request.getLockToken());
+        lockService.validateActiveLockOwnership(target.submissionId(), target.collectionName(), request.getUserId(), request.getLockToken());
         FormSubmissionState state = approvalModelResolver.resolveLifecycleState(target.submission());
         guard(List.of(FormSubmissionState.SUBMITTED, FormSubmissionState.PENDING_REVISION, FormSubmissionState.UNDER_REVIEW).contains(state),
                 "Approval flow can only be edited while the form is submitted, pending revision, or under review.");

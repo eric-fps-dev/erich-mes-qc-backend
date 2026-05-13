@@ -20,7 +20,6 @@ public class FormSubmissionLockAcquireRequest {
 
     private List<String> actorRoleIds;
 
-    @NotBlank(message = "sessionId is required")
     private String sessionId;
 
     @NotNull(message = "lockPurpose is required")

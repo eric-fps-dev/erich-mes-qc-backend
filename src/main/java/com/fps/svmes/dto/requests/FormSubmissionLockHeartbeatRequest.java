@@ -15,7 +15,6 @@ public class FormSubmissionLockHeartbeatRequest {
     @NotNull(message = "actorUserId is required")
     private Long actorUserId;
 
-    @NotBlank(message = "sessionId is required")
     private String sessionId;
 
     @NotBlank(message = "lockToken is required")

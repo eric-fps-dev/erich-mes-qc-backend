@@ -284,7 +284,8 @@ public class ApprovalInstanceServiceImpl implements ApprovalInstanceService {
         Document formSubmission = actionable.formSubmission();
         validateFreshApprovalData(request, instance, formSubmission);
         ApprovalInstanceStep current = currentStep(instance);
-        guard(current.getStepState() == ApprovalStepState.IN_PROGRESS, "Current approval step is not in progress.");
+        ApprovalStepState previousStepState = current.getStepState();
+        guard(isResolvableCurrentStepState(previousStepState), "Current approval step cannot be resolved in its present state.");
         ApprovalActor actor = actorFromRequest(request);
         guard(actorMatchesStep(current, actor), "Actor does not match the current approval step.");
         int previousSequence = safeCurrent(instance);
@@ -314,7 +315,7 @@ public class ApprovalInstanceServiceImpl implements ApprovalInstanceService {
                 touch(instance, userIdForAudit(request));
                 approvalInstanceRepository.save(instance);
             } catch (Exception e) {
-                current.setStepState(ApprovalStepState.IN_PROGRESS);
+                current.setStepState(previousStepState);
                 current.setLastActionRecord(null);
                 removeLastActionLog(instance);
                 approvalInstanceRepository.save(instance);
@@ -334,7 +335,7 @@ public class ApprovalInstanceServiceImpl implements ApprovalInstanceService {
         ApprovalActor actor = actorFromRequest(request);
         guard(actorMatchesCurrentOrLater(instance, actor), "Actor must match current or later approval step to forward.");
         ApprovalInstanceStep current = currentStep(instance);
-        guard(current.getStepState() == ApprovalStepState.IN_PROGRESS, "Current approval step is not in progress.");
+        guard(isResolvableCurrentStepState(current.getStepState()), "Current approval step cannot be resolved in its present state.");
         ApprovalActionLog logEntry = buildActionLog(instance, request, actor, ApprovalAction.FORWARDED, currentSequence, true, formSubmission);
         appendActionLog(instance, logEntry);
         current.setLastActionRecord(logEntry);
@@ -356,7 +357,7 @@ public class ApprovalInstanceServiceImpl implements ApprovalInstanceService {
         validateFreshApprovalData(request, instance, formSubmission);
         int currentSequence = safeCurrent(instance);
         ApprovalInstanceStep current = currentStep(instance);
-        guard(current.getStepState() == ApprovalStepState.IN_PROGRESS, "Current approval step is not in progress.");
+        guard(isResolvableCurrentStepState(current.getStepState()), "Current approval step cannot be resolved in its present state.");
         ApprovalActor actor = actorFromRequest(request);
         guard(actorMatchesStep(current, actor), "Actor does not match the current approval step.");
         Integer resumedStepIndex = request.getResumedStepIndex();
@@ -702,6 +703,12 @@ public class ApprovalInstanceServiceImpl implements ApprovalInstanceService {
         step.setLastActionRecord(null);
         step.setStepState(ApprovalStepState.PENDING);
         step.setResetCounter(nullToZero(step.getResetCounter()) + 1);
+    }
+
+    private boolean isResolvableCurrentStepState(ApprovalStepState stepState) {
+        return stepState == ApprovalStepState.IN_PROGRESS
+                || stepState == ApprovalStepState.PENDING
+                || stepState == ApprovalStepState.AWAITING_REVISION;
     }
 
     private boolean actorMatchesCurrentOrLater(ApprovalInstance instance, ApprovalActor actor) {

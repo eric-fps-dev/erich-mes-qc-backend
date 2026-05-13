@@ -49,8 +49,7 @@ public class FormSubmissionMutationAccessServiceImpl implements FormSubmissionMu
                     || (state == FormSubmissionState.UNDER_REVIEW && actorMatchesCurrentApprovalStep(target, actorUserId, actorRoleId, actorRoleIds));
             case DELETE -> List.of(FormSubmissionState.SUBMITTED, FormSubmissionState.PENDING_REVISION).contains(state)
                     || (state == FormSubmissionState.UNDER_REVIEW && actorMatchesCurrentApprovalStep(target, actorUserId, actorRoleId, actorRoleIds));
-            case APPROVAL_ACTION -> state == FormSubmissionState.UNDER_REVIEW
-                    && actorMatchesCurrentApprovalStep(target, actorUserId, actorRoleId, actorRoleIds);
+            case APPROVAL_ACTION -> actorMatchesCurrentApprovalStep(target, actorUserId, actorRoleId, actorRoleIds);
             case WORKFLOW_ACTION -> List.of(FormSubmissionState.SUBMITTED, FormSubmissionState.PENDING_REVISION).contains(state)
                     || (state == FormSubmissionState.UNDER_REVIEW && actorMatchesCurrentApprovalStep(target, actorUserId, actorRoleId, actorRoleIds));
             case REVIEW -> actorMatchesCurrentApprovalStep(target, actorUserId, actorRoleId, actorRoleIds);
@@ -68,7 +67,10 @@ public class FormSubmissionMutationAccessServiceImpl implements FormSubmissionMu
         if (submission == null) {
             throw new IllegalArgumentException("Submission not found: " + submissionId);
         }
-        return new ResolvedFormSubmissionTarget(submissionId, requestedCollectionName, submission, null);
+        var approvalInstance = approvalInstanceRepository
+                .findByFormSubmissionIdAndFormSubmissionCollectionName(submissionId, requestedCollectionName)
+                .orElse(null);
+        return new ResolvedFormSubmissionTarget(submissionId, requestedCollectionName, submission, approvalInstance);
     }
 
     private ResolvedFormSubmissionTarget resolveApprovalTarget(String submissionId, String requestedCollectionName) {
