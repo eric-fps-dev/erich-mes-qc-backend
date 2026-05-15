@@ -20,8 +20,8 @@ public interface QcFormDataService {
     Map<String, Object> insertFormData(String collectionName, Long userId, Map<String, Object> formData, boolean submitForApproval);
 
     /**
-     * Creates a new version of an existing submitted or pending-revision form submission and
-     * retains the prior version as submitted.
+     * Creates a new version of an existing submitted, archived, or pending-revision form submission and
+     * retains archived prior versions as archived while moving other prior versions back to submitted.
      */
     Map<String, Object> editFormData(String collectionName, Long userId, String parentSubmissionId, Long formTemplateId,
                                      Integer expectedFormSubmissionVersion, String lockToken,

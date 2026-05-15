@@ -4,6 +4,7 @@ import java.util.Arrays;
 
 public enum FormSubmissionState {
     SUBMITTED("submitted"),
+    ARCHIVED("archived"),
     PENDING_REVISION("pending_revision"),
     UNDER_REVIEW("under_review");
 

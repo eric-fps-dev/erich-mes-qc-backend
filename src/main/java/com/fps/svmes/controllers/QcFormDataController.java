@@ -75,8 +75,8 @@ public class QcFormDataController {
     @PostMapping("/edit-form/{userId}/{collectionName}")
     @Operation(
             summary = "Edit a form submission",
-            description = "Creates a new version of an existing submitted or pending revision form submission while preserving version history. "
-                    + "Requires parentId and templateId. Previous versions are always moved back to submitted."
+            description = "Creates a new version of an existing submitted, archived, or pending revision form submission while preserving version history. "
+                    + "Requires parentId and templateId. Archived prior versions remain archived; other prior versions are moved back to submitted."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Form submission version created successfully"),

@@ -28,7 +28,7 @@ public class FormSubmissionMutationGuardImpl implements FormSubmissionMutationGu
     public FormSubmissionMutationGuardContext validateEditMutation(FormSubmissionActionRequest request) {
         var target = mutationAccessService.resolveTarget(request.getSubmissionId(), request.getCollectionName(), FormSubmissionLockPurpose.EDIT);
         guard(mutationAccessService.canAccess(target, request.getActorUserId(), request.getActorRoleId(), null, FormSubmissionLockPurpose.EDIT),
-                "Only submitted or pending revision form entries can be edited.");
+                "Only submitted, archived, or pending revision form entries can be edited.");
         validateExpectedFormVersion(target.submission(), request.getExpectedFormSubmissionVersion());
         lockService.validateActiveLockOwnership(target.submissionId(), target.collectionName(), request.getActorUserId(), request.getLockToken());
         return new FormSubmissionMutationGuardContext(target, approvalModelResolver.resolveLifecycleState(target.submission()));

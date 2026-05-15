@@ -171,6 +171,7 @@ public class QcFormDataServiceImpl implements QcFormDataService {
         Date now = new Date();
 
         ApprovalModel parentModel = approvalModelResolver.resolveApprovalModel(parent);
+        FormSubmissionState parentState = approvalModelResolver.resolveLifecycleState(parent);
 
         Map<String, Object> newDoc = new HashMap<>(updatedData);
         enrichNewDocWithParentData(newDoc, parent);
@@ -190,7 +191,7 @@ public class QcFormDataServiceImpl implements QcFormDataService {
         newDoc.put("created_at", now);
         newDoc.put("updated_at", now);
         newDoc.put("created_by", userId);
-        newDoc.put("state", approvalModelResolver.resolveLifecycleState(parent).dbValue());
+        newDoc.put("state", parentState.dbValue());
         // New version inherits the parent's approval model so the version group stays consistent
         newDoc.put(ApprovalModel.DOCUMENT_FIELD, parentModel == ApprovalModel.V2 ? ApprovalModel.V2_VALUE : "legacy");
 
@@ -214,7 +215,9 @@ public class QcFormDataServiceImpl implements QcFormDataService {
         }
 
         Update parentUpdate = new Update()
-                .set("state", FormSubmissionState.SUBMITTED.dbValue())
+                .set("state", parentState == FormSubmissionState.ARCHIVED
+                        ? FormSubmissionState.ARCHIVED.dbValue()
+                        : FormSubmissionState.SUBMITTED.dbValue())
                 .set("updated_at", new Date());
         if (generatedVersionGroupId) {
             parentUpdate.set("version_group_id", versionGroupId)
@@ -227,7 +230,7 @@ public class QcFormDataServiceImpl implements QcFormDataService {
 
         Map<String, Object> response = new HashMap<>();
         response.put("new_submission_id", newSubmissionId);
-        response.put("state", approvalModelResolver.resolveLifecycleState(parent).dbValue());
+        response.put("state", parentState.dbValue());
         if (!warnings.isEmpty()) {
             response.put("warnings", warnings);
         }

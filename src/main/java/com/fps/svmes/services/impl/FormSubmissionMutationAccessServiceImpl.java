@@ -45,9 +45,9 @@ public class FormSubmissionMutationAccessServiceImpl implements FormSubmissionMu
                              FormSubmissionLockPurpose purpose) {
         FormSubmissionState state = approvalModelResolver.resolveLifecycleState(target.submission());
         return switch (purpose) {
-            case EDIT -> List.of(FormSubmissionState.SUBMITTED, FormSubmissionState.PENDING_REVISION).contains(state)
+            case EDIT -> List.of(FormSubmissionState.SUBMITTED, FormSubmissionState.ARCHIVED, FormSubmissionState.PENDING_REVISION).contains(state)
                     || (state == FormSubmissionState.UNDER_REVIEW && actorMatchesCurrentApprovalStep(target, actorUserId, actorRoleId, actorRoleIds));
-            case DELETE -> List.of(FormSubmissionState.SUBMITTED, FormSubmissionState.PENDING_REVISION).contains(state)
+            case DELETE -> List.of(FormSubmissionState.SUBMITTED, FormSubmissionState.ARCHIVED, FormSubmissionState.PENDING_REVISION).contains(state)
                     || (state == FormSubmissionState.UNDER_REVIEW && actorMatchesCurrentApprovalStep(target, actorUserId, actorRoleId, actorRoleIds));
             case APPROVAL_ACTION -> actorMatchesCurrentApprovalStep(target, actorUserId, actorRoleId, actorRoleIds);
             case WORKFLOW_ACTION -> List.of(FormSubmissionState.SUBMITTED, FormSubmissionState.PENDING_REVISION).contains(state)

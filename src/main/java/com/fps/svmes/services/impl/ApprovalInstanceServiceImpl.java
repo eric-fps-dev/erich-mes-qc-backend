@@ -236,7 +236,7 @@ public class ApprovalInstanceServiceImpl implements ApprovalInstanceService {
         saveWithAudit(instance, userIdForAudit(request));
         if (completed) {
             try {
-                updateSubmissionStateAndRefresh(instance, FormSubmissionState.SUBMITTED, userIdForAudit(request));
+                updateSubmissionStateAndRefresh(instance, FormSubmissionState.ARCHIVED, userIdForAudit(request));
             } catch (Exception e) {
                 rollbackApprovalDecision(instance, stepSnapshots, previousSequence, previousFormState, movedToUnderReview, userIdForAudit(request));
                 throw rollbackFailure(e);

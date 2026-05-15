@@ -179,7 +179,7 @@ public class LegacyApprovalMigrationServiceImpl implements LegacyApprovalMigrati
             }
         }
         if (realSteps.isEmpty()) {
-            // flow_1: no approver steps → auto-archived on creation
+            // flow_1: no approver steps, so there is no approval-complete terminal state to infer
             return FormSubmissionState.SUBMITTED;
         }
         for (Document step : realSteps) {
@@ -187,7 +187,7 @@ public class LegacyApprovalMigrationServiceImpl implements LegacyApprovalMigrati
                 return FormSubmissionState.UNDER_REVIEW;
             }
         }
-        return FormSubmissionState.SUBMITTED;
+        return FormSubmissionState.ARCHIVED;
     }
 
     // ── step construction ───────────────────────────────────────────────────
@@ -274,7 +274,7 @@ public class LegacyApprovalMigrationServiceImpl implements LegacyApprovalMigrati
 
     private String inferApprovalTemplateId(List<Document> realSteps) {
         return switch (realSteps.size()) {
-            case 0 -> null; // flow_1: auto-archived, no template
+            case 0 -> null; // flow_1: no approval template
             case 1 -> "leader".equals(realSteps.get(0).getString("role")) ? flow2TemplateId : flow3TemplateId;
             default -> flow4TemplateId;
         };
