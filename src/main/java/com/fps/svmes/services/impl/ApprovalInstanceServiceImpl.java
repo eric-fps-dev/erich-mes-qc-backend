@@ -69,7 +69,6 @@ public class ApprovalInstanceServiceImpl implements ApprovalInstanceService {
             ApprovalTemplate template = findApprovalTemplateById(approvalTemplateId);
             instance.setApprovalTemplateId(template.getId());
             instance.setApprovalSteps(copyTemplateSteps(template.getApprovalSteps()));
-            activateCurrentStep(instance);
         } else {
             instance.setApprovalTemplateId(null);
             instance.setApprovalSteps(new ArrayList<>());
@@ -80,7 +79,7 @@ public class ApprovalInstanceServiceImpl implements ApprovalInstanceService {
         instance.setCreatedBy(createdBy);
         instance.setUpdatedAt(Instant.now());
         instance.setUpdatedBy(createdBy);
-        return approvalInstanceRepository.save(instance);
+        return saveInstance(instance);
     }
 
     @Override
@@ -103,7 +102,7 @@ public class ApprovalInstanceServiceImpl implements ApprovalInstanceService {
         instance.setFormSubmissionId(newFormSubmissionId);
         populateFilterSnapshot(instance, formSubmissionStateUpdater.getLatestFormSubmission(newFormSubmissionId, formSubmissionCollectionName));
         touch(instance, updatedBy);
-        approvalInstanceRepository.save(instance);
+        saveInstance(instance);
     }
 
     @Override
@@ -130,7 +129,7 @@ public class ApprovalInstanceServiceImpl implements ApprovalInstanceService {
                     instance.getFormSubmissionCollectionName()
             ));
             touch(instance, userIdForAudit(request));
-            approvalInstanceRepository.save(instance);
+            saveInstance(instance);
             return;
         }
         guard(instance.getApprovalSteps() != null && !instance.getApprovalSteps().isEmpty(), "Approval instance has no approval steps.");
@@ -141,7 +140,7 @@ public class ApprovalInstanceServiceImpl implements ApprovalInstanceService {
                 "Current approval step cannot be resumed from its present state.");
         activateCurrentStep(instance);
         touch(instance, userIdForAudit(request));
-        approvalInstanceRepository.save(instance);
+        saveInstance(instance);
         try {
             formSubmissionStateUpdater.updateFormSubmissionState(
                     instance.getFormSubmissionId(),
@@ -154,11 +153,11 @@ public class ApprovalInstanceServiceImpl implements ApprovalInstanceService {
                     instance.getFormSubmissionCollectionName()
             ));
             touch(instance, userIdForAudit(request));
-            approvalInstanceRepository.save(instance);
+            saveInstance(instance);
         } catch (Exception e) {
             current.setStepState(previousStepState);
             removeLastActionLog(instance);
-            approvalInstanceRepository.save(instance);
+            saveInstance(instance);
             throw new ApprovalInstanceException("Action failed, approval state rolled back: " + e.getMessage(), e);
         }
     }
@@ -172,7 +171,7 @@ public class ApprovalInstanceServiceImpl implements ApprovalInstanceService {
         if (hasApprovalRecord(instance)) {
             populateFilterSnapshot(instance, formSubmission);
             touch(instance, userIdForAudit(request));
-            approvalInstanceRepository.save(instance);
+            saveInstance(instance);
             return;
         }
         FormSubmissionState targetState = fallbackExitReviewState(instance);
@@ -188,7 +187,7 @@ public class ApprovalInstanceServiceImpl implements ApprovalInstanceService {
                     instance.getFormSubmissionCollectionName()
             ));
             touch(instance, userIdForAudit(request));
-            approvalInstanceRepository.save(instance);
+            saveInstance(instance);
             return;
         }
         guard(instance.getApprovalSteps() != null && !instance.getApprovalSteps().isEmpty(), "Approval instance has no approval steps.");
@@ -197,7 +196,7 @@ public class ApprovalInstanceServiceImpl implements ApprovalInstanceService {
         appendActionLog(instance, buildActionLog(instance, request, ApprovalAction.RECALLED, null, true, formSubmission));
         current.setStepState(ApprovalStepState.PENDING);
         touch(instance, userIdForAudit(request));
-        approvalInstanceRepository.save(instance);
+        saveInstance(instance);
         try {
             formSubmissionStateUpdater.updateFormSubmissionState(
                     instance.getFormSubmissionId(),
@@ -210,11 +209,11 @@ public class ApprovalInstanceServiceImpl implements ApprovalInstanceService {
                     instance.getFormSubmissionCollectionName()
             ));
             touch(instance, userIdForAudit(request));
-            approvalInstanceRepository.save(instance);
+            saveInstance(instance);
         } catch (Exception e) {
             current.setStepState(previousStepState);
             removeLastActionLog(instance);
-            approvalInstanceRepository.save(instance);
+            saveInstance(instance);
             throw new ApprovalInstanceException("Action failed, approval state rolled back: " + e.getMessage(), e);
         }
     }
@@ -251,7 +250,7 @@ public class ApprovalInstanceServiceImpl implements ApprovalInstanceService {
             incrementVersion(instance);
         }
         touch(instance, request.getUserId());
-        approvalInstanceRepository.save(instance);
+        saveInstance(instance);
         if (newSteps.isEmpty()) {
             try {
                 formSubmissionStateUpdater.updateFormSubmissionState(
@@ -265,12 +264,12 @@ public class ApprovalInstanceServiceImpl implements ApprovalInstanceService {
                         instance.getFormSubmissionCollectionName()
                 ));
                 touch(instance, request.getUserId());
-                approvalInstanceRepository.save(instance);
+                saveInstance(instance);
             } catch (Exception e) {
                 instance.setApprovalSteps(oldSteps);
                 removeLastActionLog(instance);
                 instance.setVersionNumber(previousVersion);
-                approvalInstanceRepository.save(instance);
+                saveInstance(instance);
                 throw new ApprovalInstanceException("Action failed, approval state rolled back: " + e.getMessage(), e);
             }
         }
@@ -283,12 +282,17 @@ public class ApprovalInstanceServiceImpl implements ApprovalInstanceService {
         ApprovalInstance instance = actionable.instance();
         Document formSubmission = actionable.formSubmission();
         validateFreshApprovalData(request, instance, formSubmission);
+        FormSubmissionState previousFormState = approvalModelResolver.resolveLifecycleState(formSubmission);
+        boolean movedToUnderReview = previousFormState != FormSubmissionState.UNDER_REVIEW;
+        if (movedToUnderReview) {
+            formSubmission = transitionSubmissionToUnderReview(instance, previousFormState, userIdForAudit(request));
+        }
         ApprovalInstanceStep current = currentStep(instance);
-        ApprovalStepState previousStepState = current.getStepState();
-        guard(isResolvableCurrentStepState(previousStepState), "Current approval step cannot be resolved in its present state.");
+        int previousSequence = safeCurrent(instance);
+        List<StepStateSnapshot> stepSnapshots = snapshotAllSteps(instance.getApprovalSteps());
+        guard(isResolvableCurrentStepState(current.getStepState()), "Current approval step cannot be resolved in its present state.");
         ApprovalActor actor = actorFromRequest(request);
         guard(actorMatchesStep(current, actor), "Actor does not match the current approval step.");
-        int previousSequence = safeCurrent(instance);
         ApprovalActionLog logEntry = buildActionLog(instance, request, actor, ApprovalAction.APPROVED, previousSequence, true, formSubmission);
         appendActionLog(instance, logEntry);
         current.setLastActionRecord(logEntry);
@@ -299,7 +303,7 @@ public class ApprovalInstanceServiceImpl implements ApprovalInstanceService {
             activateCurrentStep(instance);
         }
         touch(instance, userIdForAudit(request));
-        approvalInstanceRepository.save(instance);
+        saveInstance(instance);
         if (completed) {
             try {
                 formSubmissionStateUpdater.updateFormSubmissionState(
@@ -313,14 +317,25 @@ public class ApprovalInstanceServiceImpl implements ApprovalInstanceService {
                         instance.getFormSubmissionCollectionName()
                 ));
                 touch(instance, userIdForAudit(request));
-                approvalInstanceRepository.save(instance);
+                saveInstance(instance);
             } catch (Exception e) {
-                current.setStepState(previousStepState);
-                current.setLastActionRecord(null);
-                removeLastActionLog(instance);
-                approvalInstanceRepository.save(instance);
+                rollbackApprovalDecision(instance, stepSnapshots, previousSequence, previousFormState, movedToUnderReview, userIdForAudit(request));
                 throw new ApprovalInstanceException("Action failed, approval state rolled back: " + e.getMessage(), e);
             }
+            return;
+        }
+        try {
+            if (movedToUnderReview) {
+                populateFilterSnapshot(instance, formSubmissionStateUpdater.getLatestFormSubmission(
+                        instance.getFormSubmissionId(),
+                        instance.getFormSubmissionCollectionName()
+                ));
+                touch(instance, userIdForAudit(request));
+                saveInstance(instance);
+            }
+        } catch (Exception e) {
+            rollbackApprovalDecision(instance, stepSnapshots, previousSequence, previousFormState, movedToUnderReview, userIdForAudit(request));
+            throw new ApprovalInstanceException("Action failed, approval state rolled back: " + e.getMessage(), e);
         }
     }
 
@@ -330,7 +345,13 @@ public class ApprovalInstanceServiceImpl implements ApprovalInstanceService {
         ApprovalInstance instance = actionable.instance();
         Document formSubmission = actionable.formSubmission();
         validateFreshApprovalData(request, instance, formSubmission);
+        FormSubmissionState previousFormState = approvalModelResolver.resolveLifecycleState(formSubmission);
+        boolean movedToUnderReview = previousFormState != FormSubmissionState.UNDER_REVIEW;
+        if (movedToUnderReview) {
+            formSubmission = transitionSubmissionToUnderReview(instance, previousFormState, userIdForAudit(request));
+        }
         int currentSequence = safeCurrent(instance);
+        List<StepStateSnapshot> stepSnapshots = snapshotAllSteps(instance.getApprovalSteps());
         guard(currentSequence < instance.getApprovalSteps().size() - 1, "Cannot forward because there is no next approval step.");
         ApprovalActor actor = actorFromRequest(request);
         guard(actorMatchesCurrentOrLater(instance, actor), "Actor must match current or later approval step to forward.");
@@ -343,10 +364,21 @@ public class ApprovalInstanceServiceImpl implements ApprovalInstanceService {
         instance.setCurrentStepSequence(currentSequence + 1);
         activateCurrentStep(instance);
         touch(instance, userIdForAudit(request));
-        approvalInstanceRepository.save(instance);
-        populateFilterSnapshot(instance, formSubmission);
-        touch(instance, userIdForAudit(request));
-        approvalInstanceRepository.save(instance);
+        saveInstance(instance);
+        try {
+            if (movedToUnderReview) {
+                formSubmission = formSubmissionStateUpdater.getLatestFormSubmission(
+                        instance.getFormSubmissionId(),
+                        instance.getFormSubmissionCollectionName()
+                );
+            }
+            populateFilterSnapshot(instance, formSubmission);
+            touch(instance, userIdForAudit(request));
+            saveInstance(instance);
+        } catch (Exception e) {
+            rollbackApprovalDecision(instance, stepSnapshots, currentSequence, previousFormState, movedToUnderReview, userIdForAudit(request));
+            throw new ApprovalInstanceException("Action failed, approval state rolled back: " + e.getMessage(), e);
+        }
     }
 
     @Override
@@ -379,7 +411,7 @@ public class ApprovalInstanceServiceImpl implements ApprovalInstanceService {
             markAwaitingRevision(instance.getApprovalSteps().get(targetSequence));
         }
         touch(instance, userIdForAudit(request));
-        approvalInstanceRepository.save(instance);
+        saveInstance(instance);
         try {
             formSubmissionStateUpdater.updateFormSubmissionState(
                     instance.getFormSubmissionId(),
@@ -392,12 +424,12 @@ public class ApprovalInstanceServiceImpl implements ApprovalInstanceService {
                     instance.getFormSubmissionCollectionName()
             ));
             touch(instance, userIdForAudit(request));
-            approvalInstanceRepository.save(instance);
+            saveInstance(instance);
         } catch (Exception e) {
             instance.setCurrentStepSequence(currentSequence);
             restoreStepStates(instance.getApprovalSteps(), stepSnapshots);
             removeLastActionLog(instance);
-            approvalInstanceRepository.save(instance);
+            saveInstance(instance);
             throw new ApprovalInstanceException("Action failed, approval state rolled back: " + e.getMessage(), e);
         }
     }
@@ -424,7 +456,7 @@ public class ApprovalInstanceServiceImpl implements ApprovalInstanceService {
         ApprovalInstance instance = getByFormSubmission(formSubmissionId, formSubmissionCollectionName);
         populateFilterSnapshot(instance, formSubmissionStateUpdater.getLatestFormSubmission(formSubmissionId, formSubmissionCollectionName));
         touch(instance, updatedBy);
-        approvalInstanceRepository.save(instance);
+        saveInstance(instance);
     }
 
     private record ActionableInstance(ApprovalInstance instance, Document formSubmission) {}
@@ -447,6 +479,60 @@ public class ApprovalInstanceServiceImpl implements ApprovalInstanceService {
         int current = safeCurrent(instance);
         guard(current >= 0 && current < instance.getApprovalSteps().size(), "Current approval step is out of range.");
         return instance.getApprovalSteps().get(current);
+    }
+
+    private ApprovalInstance saveInstance(ApprovalInstance instance) {
+        syncApprovalProcessStatus(instance);
+        return approvalInstanceRepository.save(instance);
+    }
+
+    private void syncApprovalProcessStatus(ApprovalInstance instance) {
+        instance.setApprovalProcessStatus(ApprovalProcessStatusResolver.deriveDbValue(instance.getApprovalSteps()));
+    }
+
+    private Document transitionSubmissionToUnderReview(ApprovalInstance instance, FormSubmissionState currentState, Long updatedBy) {
+        if (currentState == FormSubmissionState.UNDER_REVIEW) {
+            return formSubmissionStateUpdater.getLatestFormSubmission(
+                    instance.getFormSubmissionId(),
+                    instance.getFormSubmissionCollectionName()
+            );
+        }
+        formSubmissionStateUpdater.updateFormSubmissionState(
+                instance.getFormSubmissionId(),
+                instance.getFormSubmissionCollectionName(),
+                FormSubmissionState.UNDER_REVIEW,
+                updatedBy
+        );
+        return formSubmissionStateUpdater.getLatestFormSubmission(
+                instance.getFormSubmissionId(),
+                instance.getFormSubmissionCollectionName()
+        );
+    }
+
+    private void rollbackApprovalDecision(
+            ApprovalInstance instance,
+            List<StepStateSnapshot> stepSnapshots,
+            int previousSequence,
+            FormSubmissionState previousFormState,
+            boolean movedToUnderReview,
+            Long updatedBy
+    ) {
+        instance.setCurrentStepSequence(previousSequence);
+        restoreStepStates(instance.getApprovalSteps(), stepSnapshots);
+        removeLastActionLog(instance);
+        if (movedToUnderReview) {
+            formSubmissionStateUpdater.updateFormSubmissionState(
+                    instance.getFormSubmissionId(),
+                    instance.getFormSubmissionCollectionName(),
+                    previousFormState,
+                    updatedBy
+            );
+            populateFilterSnapshot(instance, formSubmissionStateUpdater.getLatestFormSubmission(
+                    instance.getFormSubmissionId(),
+                    instance.getFormSubmissionCollectionName()
+            ));
+        }
+        saveInstance(instance);
     }
 
     /**
@@ -481,6 +567,7 @@ public class ApprovalInstanceServiceImpl implements ApprovalInstanceService {
         logEntry.setStepSequence(stepSequence);
         logEntry.setComments(request.getComment());
         logEntry.setESignature(request.getESignature());
+        logEntry.setSuggestRetest(request.getSuggestRetest());
         logEntry.setActorUserId(actor.actorUserId());
         logEntry.setActorUserName(actor.actorUserName() != null ? actor.actorUserName() : actorUserName(actor.actorUserId()));
         logEntry.setActorRoleId(actorRoleIdForLog(instance, actor, stepSequence));

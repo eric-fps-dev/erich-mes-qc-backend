@@ -134,6 +134,7 @@ public class LegacyApprovalMigrationServiceImpl implements LegacyApprovalMigrati
         instance.setFormTemplateId(String.valueOf(formTemplateId));
         instance.setCurrentStepSequence(currentStepSequence);
         instance.setApprovalSteps(instanceSteps);
+        instance.setApprovalProcessStatus(ApprovalProcessStatusResolver.deriveDbValue(instanceSteps));
         instance.setActionLog(actionLog);
         instance.setVersionNumber(1);
         instance.setFilterSnapshot(buildFilterSnapshot(doc, formTemplateId, formState));

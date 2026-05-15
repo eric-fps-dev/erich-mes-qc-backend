@@ -67,7 +67,7 @@ public class ApprovalInstanceSnapshotBackfillServiceImpl implements ApprovalInst
 
     private boolean normalizeLegacyDiscardActions(Document instance) {
         boolean updated = false;
-        updated |= normalizeActionLogs(instance.get("action_log"));
+        updated |= normalizeActionLogs(instance.get("actionLog"));
         updated |= normalizeApprovalSteps(instance.get("approvalSteps"));
         return updated;
     }

@@ -23,6 +23,9 @@ public class ApprovalActionLog {
     @Field("eSignature")
     private String eSignature;
 
+    @Field("suggestRetest")
+    private Boolean suggestRetest;
+
     @Field("actorUserId")
     private String actorUserId;
 

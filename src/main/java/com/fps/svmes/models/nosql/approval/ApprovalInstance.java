@@ -34,6 +34,9 @@ public class ApprovalInstance extends BaseInstant {
     @Field("approvalSteps")
     private List<ApprovalInstanceStep> approvalSteps;
 
+    @Field("approvalProcessStatus")
+    private String approvalProcessStatus;
+
     @Field("action_log")
     private List<ApprovalActionLog> actionLog;
 

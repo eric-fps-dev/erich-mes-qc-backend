@@ -149,6 +149,96 @@ public class ApprovalInstanceController {
         }
     }
 
+    @PostMapping("/enter-review")
+    @Operation(
+            summary = "Enter review",
+            description = "Moves a submitted or pending revision form submission into under-review state. "
+                    + "When omitApprovalActionLog=true, this acts as a UI review guard only and will not write approval action logs or mutate approval-step state."
+    )
+    @io.swagger.v3.oas.annotations.parameters.RequestBody(
+            required = true,
+            description = "Enter-review payload. Workers do not need approval-instance version access for this action.",
+            content = @Content(
+                    mediaType = "application/json",
+                    schema = @Schema(implementation = FormSubmissionActionRequest.class),
+                    examples = @ExampleObject(
+                            name = "EnterReview",
+                            summary = "Enter review without approval-instance version",
+                            value = """
+                                    {
+                                      "submissionId": "69d44796b8b3934d9cb382f7",
+                                      "collectionName": "form_template_695_202604",
+                                      "actorUserId": 274,
+                                      "expectedFormSubmissionVersion": 1,
+                                      "comment": "open approval detail"
+                                    }
+                                    """
+                    )
+            )
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Form submission entered review successfully"),
+            @ApiResponse(responseCode = "409", description = "State is invalid or the submitted versions are stale"),
+            @ApiResponse(responseCode = "500", description = "Unexpected error entering review")
+    })
+    public ResponseEntity<ResponseResult<String>> enterReview(@Valid @RequestBody FormSubmissionActionRequest request) {
+        try {
+            approvalInstanceService.enterReview(request);
+            return ResponseResult.of("Form submission entered review successfully", ResponseStatus.SUCCESS);
+        } catch (IllegalStateException | ApprovalInstanceException e) {
+            return ResponseResult.fail(e.getMessage(), ResponseStatus.CONFLICT, e);
+        } catch (Exception e) {
+            log.error("Error entering review", e);
+            return ResponseResult.fail("Error entering review: " + e.getMessage(), ResponseStatus.INTERNAL_SERVER_ERROR, e);
+        }
+    }
+
+    @PostMapping("/exit-review")
+    @Operation(
+            summary = "Exit review",
+            description = "Exits a review guard from under-review state. "
+                    + "If approval-instance action history already exists, the form remains under review. "
+                    + "When omitApprovalActionLog=true, this acts as a UI review-close path and will not write approval action logs or mutate approval-step state."
+    )
+    @io.swagger.v3.oas.annotations.parameters.RequestBody(
+            required = true,
+            description = "Exit-review payload. Workers do not need approval-instance version access for this action.",
+            content = @Content(
+                    mediaType = "application/json",
+                    schema = @Schema(implementation = FormSubmissionActionRequest.class),
+                    examples = @ExampleObject(
+                            name = "ExitReview",
+                            summary = "Exit review without approval-instance version",
+                            value = """
+                                    {
+                                      "submissionId": "69d44796b8b3934d9cb382f7",
+                                      "collectionName": "form_template_695_202604",
+                                      "actorUserId": 274,
+                                      "expectedFormSubmissionVersion": 1,
+                                      "omitApprovalActionLog": true,
+                                      "comment": "close approval detail"
+                                    }
+                                    """
+                    )
+            )
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Form submission exited review successfully"),
+            @ApiResponse(responseCode = "409", description = "State is invalid or the submitted versions are stale"),
+            @ApiResponse(responseCode = "500", description = "Unexpected error exiting review")
+    })
+    public ResponseEntity<ResponseResult<String>> exitReview(@Valid @RequestBody FormSubmissionActionRequest request) {
+        try {
+            approvalInstanceService.exitReview(request);
+            return ResponseResult.of("Form submission exited review successfully", ResponseStatus.SUCCESS);
+        } catch (IllegalStateException | ApprovalInstanceException e) {
+            return ResponseResult.fail(e.getMessage(), ResponseStatus.CONFLICT, e);
+        } catch (Exception e) {
+            log.error("Error exiting review", e);
+            return ResponseResult.fail("Error exiting review: " + e.getMessage(), ResponseStatus.INTERNAL_SERVER_ERROR, e);
+        }
+    }
+
     @PostMapping("/approval/approve")
     @Operation(
             summary = "Approve current step",

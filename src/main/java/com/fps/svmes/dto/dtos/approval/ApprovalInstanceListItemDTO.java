@@ -14,6 +14,7 @@ public class ApprovalInstanceListItemDTO {
     private String approvalTemplateId;
     private Integer currentStepSequence;
     private List<ApprovalInstanceListStepDTO> approvalSteps;
+    private String approvalProcessStatus;
     private Integer approvalInstanceVersion;
     private Date createdAt;
     private Instant updatedAt;

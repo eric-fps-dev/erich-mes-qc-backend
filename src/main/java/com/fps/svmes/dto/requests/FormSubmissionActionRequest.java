@@ -68,9 +68,11 @@ public class FormSubmissionActionRequest {
     )
     private Integer resumedStepIndex;
 
-    // Do not need later
-    @Schema(description = "Legacy helper flag retained for compatibility.", example = "false")
-    private boolean suggestRetest;
+    @Schema(
+            description = "Optional retest recommendation captured for approve, forward, and request-correction workflow actions.",
+            example = "false"
+    )
+    private Boolean suggestRetest;
 
     @JsonProperty("eSignature")
     @Schema(description = "Optional signature or e-signature payload captured with the action.", example = "Justin Li")

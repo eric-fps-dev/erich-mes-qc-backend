@@ -475,6 +475,7 @@ public class QcFormDataServiceImpl implements QcFormDataService {
                 .include("formSubmissionCollectionName")
                 .include("approvalTemplateId")
                 .include("currentStepSequence")
+                .include("approvalProcessStatus")
                 .include("approvalSteps.sequence")
                 .include("approvalSteps.stepName")
                 .include("approvalSteps.requiredUserId")
@@ -501,6 +502,7 @@ public class QcFormDataServiceImpl implements QcFormDataService {
         dto.setApprovalTemplateId(instance.getApprovalTemplateId());
         dto.setCurrentStepSequence(instance.getCurrentStepSequence());
         dto.setApprovalSteps(toApprovalInstanceListSteps(instance));
+        dto.setApprovalProcessStatus(resolveApprovalProcessStatus(instance));
         dto.setApprovalInstanceVersion(nullToOne(instance.getVersionNumber()));
         dto.setFormSubmissionVersion(snapshot == null ? 1 : nullToOne(snapshot.getFormSubmissionVersion()));
         dto.setCreatedAt(snapshot == null ? null : snapshot.getCreatedAt());
@@ -531,6 +533,7 @@ public class QcFormDataServiceImpl implements QcFormDataService {
         dto.setApprovalTemplateId(instance.getApprovalTemplateId());
         dto.setCurrentStepSequence(instance.getCurrentStepSequence());
         dto.setApprovalSteps(toApprovalInstanceListSteps(instance));
+        dto.setApprovalProcessStatus(resolveApprovalProcessStatus(instance));
         dto.setActionLog(instance.getActionLog() == null ? List.of() : instance.getActionLog());
         dto.setApprovalInstanceVersion(nullToOne(instance.getVersionNumber()));
         dto.setCreatedAt(snapshot == null ? null : snapshot.getCreatedAt());
@@ -760,7 +763,9 @@ public class QcFormDataServiceImpl implements QcFormDataService {
         dto.setCollectionName(collectionName);
         dto.setFormTemplateId(parseTemplateId(collectionName));
         dto.setFormTemplateName(formTemplateName(dto.getFormTemplateId()));
-        dto.setApprovalSteps(toLegacyApprovalSteps(submission.get("approval_info")));
+        List<ApprovalInstanceListStepDTO> approvalSteps = toLegacyApprovalSteps(submission.get("approval_info"));
+        dto.setApprovalSteps(approvalSteps);
+        dto.setApprovalProcessStatus(deriveApprovalProcessStatus(approvalSteps));
         dto.setFormData(new HashMap<>(submission));
         return dto;
     }
@@ -809,6 +814,19 @@ public class QcFormDataServiceImpl implements QcFormDataService {
             case "not_started" -> ApprovalStepState.PENDING;
             default -> ApprovalStepState.PENDING;
         };
+    }
+
+    private String resolveApprovalProcessStatus(ApprovalInstance instance) {
+        if (instance.getApprovalProcessStatus() != null && !instance.getApprovalProcessStatus().isBlank()) {
+            return instance.getApprovalProcessStatus();
+        }
+        return ApprovalProcessStatusResolver.deriveDbValue(instance.getApprovalSteps());
+    }
+
+    private String deriveApprovalProcessStatus(List<ApprovalInstanceListStepDTO> approvalSteps) {
+        return ApprovalProcessStatusResolver.deriveDbValueFromStates(approvalSteps.stream()
+                .map(ApprovalInstanceListStepDTO::getStepState)
+                .toList());
     }
 
     private String stringValue(Object value) {
