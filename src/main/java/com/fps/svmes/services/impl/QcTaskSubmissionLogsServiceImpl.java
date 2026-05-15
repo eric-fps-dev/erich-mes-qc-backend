@@ -7,19 +7,16 @@ import com.fps.svmes.models.nosql.approval.ApprovalInstance;
 import com.fps.svmes.models.sql.qcForm.QcTaskSubmissionLogs;
 import com.fps.svmes.repositories.jpaRepo.qcForm.QcFormTemplateRepository;
 import com.fps.svmes.repositories.jpaRepo.qcForm.QcTaskSubmissionLogsRepository;
-// import com.fps.svmes.repositories.jpaRepo.qcForm.QcApprovalAssignmentRepository;
 import com.fps.svmes.services.AlertRecordService;
 import com.fps.svmes.repositories.jpaRepo.user.UserRepository;
 import com.fps.svmes.services.QcTaskSubmissionLogsService;
 import com.fps.svmes.services.QcSnapshotSubmissionService;
-import com.fps.svmes.services.ApprovalInstanceService;
 import com.fps.svmes.services.FormSubmissionMutationGuard;
 import com.itextpdf.text.pdf.BaseFont;
 import com.itextpdf.text.pdf.PdfPCell;
 import com.itextpdf.text.pdf.PdfPTable;
 import com.itextpdf.text.pdf.PdfWriter;
 import com.mongodb.client.MongoCollection;
-import jakarta.validation.constraints.Null;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
@@ -34,7 +31,6 @@ import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.stereotype.Service;
 import org.springframework.data.mongodb.core.query.Query;
-import org.springframework.data.mongodb.core.query.Update;
 import com.itextpdf.text.*;
 
 import java.io.InputStream;
@@ -72,12 +68,6 @@ public class QcTaskSubmissionLogsServiceImpl implements QcTaskSubmissionLogsServ
 
     @Autowired
     private QcSnapshotSubmissionService qcSnapshotSubmissionService;
-
-    // @Autowired
-    // private QcApprovalAssignmentRepository qcApprovalAssignmentRepository;
-
-    @Autowired
-    private ApprovalInstanceService approvalInstanceService;
 
     @Autowired
     private FormSubmissionMutationGuard formSubmissionMutationGuard;
@@ -657,11 +647,6 @@ public class QcTaskSubmissionLogsServiceImpl implements QcTaskSubmissionLogsServ
             // Delete associated alert records
             alertRecordService.deleteBySubmissionIds(idsToDelete);
 
-            // // Delete associated approval assignments
-            // for (String id : idsToDelete) {
-            //     qcApprovalAssignmentRepository.deleteBySubmissionId(id);
-            // }
-
             // Delete corresponding approval instances
             Query deleteApprovalInstancesQuery = new Query(Criteria.where("formSubmissionCollectionName").is(collectionName)
                     .and("formSubmissionId").in(idsToDelete));
@@ -676,9 +661,6 @@ public class QcTaskSubmissionLogsServiceImpl implements QcTaskSubmissionLogsServ
 
             // Delete associated alert records
             alertRecordService.deleteBySubmissionIds(Collections.singletonList(submissionId));
-
-            // // Delete associated approval assignments
-            // qcApprovalAssignmentRepository.deleteBySubmissionId(submissionId);
 
             // Delete corresponding approval instances
             Query deleteApprovalInstanceQuery = new Query(Criteria.where("formSubmissionCollectionName").is(collectionName)

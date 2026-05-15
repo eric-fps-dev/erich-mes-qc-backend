@@ -181,8 +181,11 @@ public class ApprovalInstanceController {
             @ApiResponse(responseCode = "409", description = "State is invalid or the submitted versions are stale"),
             @ApiResponse(responseCode = "500", description = "Unexpected error entering review")
     })
-    public ResponseEntity<ResponseResult<String>> enterReview(@Valid @RequestBody FormSubmissionActionRequest request) {
+    public ResponseEntity<ResponseResult<String>> enterReview(
+            @RequestHeader(FormSubmissionLockHeaders.LOCK_TOKEN) String lockToken,
+            @Valid @RequestBody FormSubmissionActionRequest request) {
         try {
+            request.setLockToken(lockToken);
             approvalInstanceService.enterReview(request);
             return ResponseResult.of("Form submission entered review successfully", ResponseStatus.SUCCESS);
         } catch (IllegalStateException | ApprovalInstanceException e) {
@@ -227,8 +230,11 @@ public class ApprovalInstanceController {
             @ApiResponse(responseCode = "409", description = "State is invalid or the submitted versions are stale"),
             @ApiResponse(responseCode = "500", description = "Unexpected error exiting review")
     })
-    public ResponseEntity<ResponseResult<String>> exitReview(@Valid @RequestBody FormSubmissionActionRequest request) {
+    public ResponseEntity<ResponseResult<String>> exitReview(
+            @RequestHeader(FormSubmissionLockHeaders.LOCK_TOKEN) String lockToken,
+            @Valid @RequestBody FormSubmissionActionRequest request) {
         try {
+            request.setLockToken(lockToken);
             approvalInstanceService.exitReview(request);
             return ResponseResult.of("Form submission exited review successfully", ResponseStatus.SUCCESS);
         } catch (IllegalStateException | ApprovalInstanceException e) {
@@ -258,7 +264,6 @@ public class ApprovalInstanceController {
                                       "submissionId": "69d44796b8b3934d9cb382f7",
                                       "collectionName": "form_template_695_202604",
                                       "actorUserId": 274,
-                                      "expectedApprovalInstanceVersion": 1,
                                       "expectedFormSubmissionVersion": 1,
                                       "actorRoleId": "6",
                                       "comment": "approve from role id 6",
@@ -275,11 +280,9 @@ public class ApprovalInstanceController {
     })
     public ResponseEntity<ResponseResult<String>> approve(
             @RequestHeader(FormSubmissionLockHeaders.LOCK_TOKEN) String lockToken,
-            @RequestHeader(name = FormSubmissionLockHeaders.LOCK_SESSION_ID, required = false) String lockSessionId,
             @Valid @RequestBody FormSubmissionActionRequest request) {
         try {
             request.setLockToken(lockToken);
-            request.setLockSessionId(lockSessionId);
             approvalInstanceService.approve(request);
             return ResponseResult.of("Form submission approved successfully", ResponseStatus.SUCCESS);
         } catch (IllegalStateException | ApprovalInstanceException e) {
@@ -302,11 +305,9 @@ public class ApprovalInstanceController {
     })
     public ResponseEntity<ResponseResult<String>> forward(
             @RequestHeader(FormSubmissionLockHeaders.LOCK_TOKEN) String lockToken,
-            @RequestHeader(name = FormSubmissionLockHeaders.LOCK_SESSION_ID, required = false) String lockSessionId,
             @Valid @RequestBody FormSubmissionActionRequest request) {
         try {
             request.setLockToken(lockToken);
-            request.setLockSessionId(lockSessionId);
             approvalInstanceService.forward(request);
             return ResponseResult.of("Form submission forwarded to next approval step", ResponseStatus.SUCCESS);
         } catch (IllegalStateException | ApprovalInstanceException e) {
@@ -329,11 +330,9 @@ public class ApprovalInstanceController {
     })
     public ResponseEntity<ResponseResult<String>> requestCorrection(
             @RequestHeader(FormSubmissionLockHeaders.LOCK_TOKEN) String lockToken,
-            @RequestHeader(name = FormSubmissionLockHeaders.LOCK_SESSION_ID, required = false) String lockSessionId,
             @Valid @RequestBody FormSubmissionActionRequest request) {
         try {
             request.setLockToken(lockToken);
-            request.setLockSessionId(lockSessionId);
             approvalInstanceService.requestCorrection(request);
             return ResponseResult.of("Correction requested successfully", ResponseStatus.SUCCESS);
         } catch (IllegalStateException | ApprovalInstanceException e) {
@@ -390,11 +389,9 @@ public class ApprovalInstanceController {
     })
     public ResponseEntity<ResponseResult<Document>> editApprovalFlow(
             @RequestHeader(FormSubmissionLockHeaders.LOCK_TOKEN) String lockToken,
-            @RequestHeader(name = FormSubmissionLockHeaders.LOCK_SESSION_ID, required = false) String lockSessionId,
             @Valid @RequestBody ApprovalFlowEditRequest request) {
         try {
             request.setLockToken(lockToken);
-            request.setLockSessionId(lockSessionId);
             return ResponseResult.of(qcFormDataService.editApprovalFlow(request), ResponseStatus.SUCCESS);
         } catch (IllegalStateException | ApprovalInstanceException e) {
             return ResponseResult.fail(e.getMessage(), ResponseStatus.CONFLICT, e);

@@ -41,13 +41,6 @@ public class FormSubmissionActionRequest {
     )
     private Long actorUserId;
 
-    @Schema(
-            description = "Optional. Approval instance version expected by the client. Required for approval actions that mutate live step progress or flow structure, but not required for enter-review or exit-review.",
-            example = "1",
-            requiredMode = Schema.RequiredMode.NOT_REQUIRED
-    )
-    private Integer expectedApprovalInstanceVersion;
-
     @NotNull(message = "expectedFormSubmissionVersion is required")
     @Schema(
             description = "Required. Form submission version expected by the client. Used to reject stale actions.",
@@ -83,8 +76,4 @@ public class FormSubmissionActionRequest {
 
     @Schema(description = "Active form-submission lock token supplied via request header.", accessMode = Schema.AccessMode.READ_ONLY)
     private String lockToken;
-
-    @Schema(description = "Active form-submission lock session id supplied via request header.", accessMode = Schema.AccessMode.READ_ONLY)
-    private String lockSessionId;
-
 }

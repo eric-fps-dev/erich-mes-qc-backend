@@ -24,7 +24,7 @@ public interface QcFormDataService {
      * retains the prior version as submitted.
      */
     Map<String, Object> editFormData(String collectionName, Long userId, String parentSubmissionId, Long formTemplateId,
-                                     Integer expectedFormSubmissionVersion, String lockToken, String lockSessionId,
+                                     Integer expectedFormSubmissionVersion, String lockToken,
                                      Map<String, Object> updatedData);
 
     /**

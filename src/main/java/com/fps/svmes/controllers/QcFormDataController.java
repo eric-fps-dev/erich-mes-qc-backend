@@ -91,7 +91,6 @@ public class QcFormDataController {
             @RequestParam("templateId") Long formTemplateId,
             @RequestParam("expectedFormSubmissionVersion") Integer expectedFormSubmissionVersion,
             @RequestHeader(FormSubmissionLockHeaders.LOCK_TOKEN) String lockToken,
-            @RequestHeader(name = FormSubmissionLockHeaders.LOCK_SESSION_ID, required = false) String lockSessionId,
             @RequestBody Map<String, Object> updatedData) {
         try {
             return ResponseResult.of(
@@ -102,7 +101,6 @@ public class QcFormDataController {
                             formTemplateId,
                             expectedFormSubmissionVersion,
                             lockToken,
-                            lockSessionId,
                             updatedData
                     ),
                     ResponseStatus.SUCCESS
@@ -129,11 +127,9 @@ public class QcFormDataController {
     })
     public ResponseEntity<ResponseResult<String>> deleteFormSubmission(
             @RequestHeader(FormSubmissionLockHeaders.LOCK_TOKEN) String lockToken,
-            @RequestHeader(name = FormSubmissionLockHeaders.LOCK_SESSION_ID, required = false) String lockSessionId,
             @Valid @RequestBody FormSubmissionActionRequest request) {
         try {
             request.setLockToken(lockToken);
-            request.setLockSessionId(lockSessionId);
             qcTaskSubmissionLogsService.deleteSubmissionLog(request);
             return ResponseResult.of("Form submission deleted successfully", ResponseStatus.SUCCESS);
         } catch (IllegalStateException | ApprovalInstanceException e) {

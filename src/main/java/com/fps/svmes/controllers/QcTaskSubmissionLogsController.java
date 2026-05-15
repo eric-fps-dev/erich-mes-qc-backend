@@ -147,8 +147,7 @@ public class QcTaskSubmissionLogsController {
             @RequestParam String createdAt,
             @RequestParam Long actorUserId,
             @RequestParam Integer expectedFormSubmissionVersion,
-            @RequestHeader(FormSubmissionLockHeaders.LOCK_TOKEN) String lockToken,
-            @RequestHeader(name = FormSubmissionLockHeaders.LOCK_SESSION_ID, required = false) String lockSessionId) {
+            @RequestHeader(FormSubmissionLockHeaders.LOCK_TOKEN) String lockToken) {
         try {
             // determine the form_template_{id}_{YYYYMM} collection to look for according to createdAt example createdAt string 2025-02-05 19:31:58
             String collectionName = "form_template_" + qcFormTemplateId + "_" + createdAt.substring(0, 7).replace("-", "");
@@ -158,7 +157,6 @@ public class QcTaskSubmissionLogsController {
             request.setActorUserId(actorUserId);
             request.setExpectedFormSubmissionVersion(expectedFormSubmissionVersion);
             request.setLockToken(lockToken);
-            request.setLockSessionId(lockSessionId);
             qcTaskSubmissionLogsService.deleteSubmissionLog(request);
             return ResponseEntity.ok("Submission log deleted successfully");
         } catch (IllegalStateException e) {

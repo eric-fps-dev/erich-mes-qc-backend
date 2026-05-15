@@ -9,6 +9,8 @@ public interface FormSubmissionMutationGuard {
 
     FormSubmissionMutationGuardContext validateDeleteMutation(FormSubmissionActionRequest request);
 
+    FormSubmissionMutationGuardContext validateReviewMutation(FormSubmissionActionRequest request);
+
     FormSubmissionMutationGuardContext validateApprovalMutation(FormSubmissionActionRequest request);
 
     FormSubmissionMutationGuardContext validateWorkflowMutation(ApprovalFlowEditRequest request);

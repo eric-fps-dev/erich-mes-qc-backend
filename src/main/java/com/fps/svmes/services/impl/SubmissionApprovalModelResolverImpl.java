@@ -21,7 +21,11 @@ public class SubmissionApprovalModelResolverImpl implements SubmissionApprovalMo
     public FormSubmissionState resolveLifecycleState(Document submission) {
         String state = submission.getString("state");
         if (state != null && !state.isBlank()) {
-            return FormSubmissionState.fromValue(state);
+            try {
+                return FormSubmissionState.fromValue(state);
+            } catch (IllegalArgumentException ignored) {
+                return FormSubmissionState.SUBMITTED;
+            }
         }
         // Legacy inference: derive state from embedded approval_info when state field is absent
         if (legacyApprovalComplete(submission)) {

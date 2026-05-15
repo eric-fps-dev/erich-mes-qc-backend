@@ -136,7 +136,6 @@ public class LegacyApprovalMigrationServiceImpl implements LegacyApprovalMigrati
         instance.setApprovalSteps(instanceSteps);
         instance.setApprovalProcessStatus(ApprovalProcessStatusResolver.deriveDbValue(instanceSteps));
         instance.setActionLog(actionLog);
-        instance.setVersionNumber(1);
         instance.setFilterSnapshot(buildFilterSnapshot(doc, formTemplateId, formState));
 
         Date docCreatedAt = doc.getDate("created_at");

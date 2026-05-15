@@ -127,7 +127,6 @@ public class QcFormDataServiceImpl implements QcFormDataService {
             autoSubmitRequest.setCollectionName(collectionName);
             autoSubmitRequest.setActorUserId(userId);
             autoSubmitRequest.setExpectedFormSubmissionVersion(insertedDocument.getInteger("version", 1));
-            autoSubmitRequest.setExpectedApprovalInstanceVersion(instance.getVersionNumber());
             approvalInstanceService.enterReview(autoSubmitRequest);
             finalState = FormSubmissionState.UNDER_REVIEW;
         }
@@ -157,7 +156,7 @@ public class QcFormDataServiceImpl implements QcFormDataService {
 
     @Override
     public Map<String, Object> editFormData(String collectionName, Long userId, String parentSubmissionId, Long formTemplateId,
-                                            Integer expectedFormSubmissionVersion, String lockToken, String lockSessionId,
+                                            Integer expectedFormSubmissionVersion, String lockToken,
                                             Map<String, Object> updatedData) {
         com.fps.svmes.dto.requests.FormSubmissionActionRequest actionRequest =
                 new com.fps.svmes.dto.requests.FormSubmissionActionRequest();
@@ -166,7 +165,6 @@ public class QcFormDataServiceImpl implements QcFormDataService {
         actionRequest.setActorUserId(userId);
         actionRequest.setExpectedFormSubmissionVersion(expectedFormSubmissionVersion);
         actionRequest.setLockToken(lockToken);
-        actionRequest.setLockSessionId(lockSessionId);
         var guardContext = formSubmissionMutationGuard.validateEditMutation(actionRequest);
         Document parent = guardContext.target().submission();
         collectionName = guardContext.target().collectionName();
@@ -437,7 +435,6 @@ public class QcFormDataServiceImpl implements QcFormDataService {
             case "approval_instance_id", "approvalInstanceId" -> "_id";
             case "approval_template_id", "approvalTemplateId" -> "approvalTemplateId";
             case "current_step_sequence", "currentStepSequence" -> "currentStepSequence";
-            case "approval_instance_version", "approvalInstanceVersion" -> "versionNumber";
             case "form_submission_version", "formSubmissionVersion" -> "filterSnapshot.formSubmissionVersion";
             case "created_by", "createdBy" -> "filterSnapshot.createdBy";
             case "created_at", "createdAt" -> "filterSnapshot.createdAt";
@@ -483,7 +480,6 @@ public class QcFormDataServiceImpl implements QcFormDataService {
                 .include("approvalSteps.requiredType")
                 .include("approvalSteps.stepState")
                 .include("approvalSteps.resetCounter")
-                .include("versionNumber")
                 .include("isAlarmTriggered")
                 .include("filterSnapshot");
     }
@@ -503,7 +499,6 @@ public class QcFormDataServiceImpl implements QcFormDataService {
         dto.setCurrentStepSequence(instance.getCurrentStepSequence());
         dto.setApprovalSteps(toApprovalInstanceListSteps(instance));
         dto.setApprovalProcessStatus(resolveApprovalProcessStatus(instance));
-        dto.setApprovalInstanceVersion(nullToOne(instance.getVersionNumber()));
         dto.setFormSubmissionVersion(snapshot == null ? 1 : nullToOne(snapshot.getFormSubmissionVersion()));
         dto.setCreatedAt(snapshot == null ? null : snapshot.getCreatedAt());
         dto.setUpdatedAt(instance.getUpdatedAt());
@@ -535,7 +530,6 @@ public class QcFormDataServiceImpl implements QcFormDataService {
         dto.setApprovalSteps(toApprovalInstanceListSteps(instance));
         dto.setApprovalProcessStatus(resolveApprovalProcessStatus(instance));
         dto.setActionLog(instance.getActionLog() == null ? List.of() : instance.getActionLog());
-        dto.setApprovalInstanceVersion(nullToOne(instance.getVersionNumber()));
         dto.setCreatedAt(snapshot == null ? null : snapshot.getCreatedAt());
         dto.setUpdatedAt(instance.getUpdatedAt());
         dto.setCreatedBy(snapshot == null ? null : snapshot.getCreatedBy());

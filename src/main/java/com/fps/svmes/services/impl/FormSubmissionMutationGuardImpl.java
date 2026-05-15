@@ -45,6 +45,16 @@ public class FormSubmissionMutationGuardImpl implements FormSubmissionMutationGu
     }
 
     @Override
+    public FormSubmissionMutationGuardContext validateReviewMutation(FormSubmissionActionRequest request) {
+        var target = mutationAccessService.resolveTarget(request.getSubmissionId(), request.getCollectionName(), FormSubmissionLockPurpose.REVIEW);
+        guard(mutationAccessService.canAccess(target, request.getActorUserId(), request.getActorRoleId(), null, FormSubmissionLockPurpose.REVIEW),
+                "Current user is not allowed to open or close review for this approval step.");
+        validateExpectedFormVersion(target.submission(), request.getExpectedFormSubmissionVersion());
+        lockService.validateActiveLockOwnership(target.submissionId(), target.collectionName(), request.getActorUserId(), request.getLockToken());
+        return new FormSubmissionMutationGuardContext(target, approvalModelResolver.resolveLifecycleState(target.submission()));
+    }
+
+    @Override
     public FormSubmissionMutationGuardContext validateApprovalMutation(FormSubmissionActionRequest request) {
         var target = mutationAccessService.resolveTarget(request.getSubmissionId(), request.getCollectionName(), FormSubmissionLockPurpose.APPROVAL_ACTION);
         guard(mutationAccessService.canAccess(target, request.getActorUserId(), request.getActorRoleId(), null, FormSubmissionLockPurpose.APPROVAL_ACTION),

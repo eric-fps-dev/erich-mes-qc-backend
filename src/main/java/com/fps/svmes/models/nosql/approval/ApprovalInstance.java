@@ -37,11 +37,8 @@ public class ApprovalInstance extends BaseInstant {
     @Field("approvalProcessStatus")
     private String approvalProcessStatus;
 
-    @Field("action_log")
+    @Field("actionLog")
     private List<ApprovalActionLog> actionLog;
-
-    @Field("versionNumber")
-    private Integer versionNumber;
 
     @Field("isAlarmTriggered")
     private Boolean isAlarmTriggered;
