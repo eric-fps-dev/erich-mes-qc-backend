@@ -12,8 +12,7 @@ import lombok.Data;
         requiredProperties = {
                 "submissionId",
                 "collectionName",
-                "actorUserId",
-                "expectedFormSubmissionVersion"
+                "actorUserId"
         }
 )
 public class FormSubmissionActionRequest {
@@ -40,14 +39,6 @@ public class FormSubmissionActionRequest {
             requiredMode = Schema.RequiredMode.REQUIRED
     )
     private Long actorUserId;
-
-    @NotNull(message = "expectedFormSubmissionVersion is required")
-    @Schema(
-            description = "Required. Form submission version expected by the client. Used to reject stale actions.",
-            example = "1",
-            requiredMode = Schema.RequiredMode.REQUIRED
-    )
-    private Integer expectedFormSubmissionVersion;
     
     @Schema(description = "MES role id of the acting approver. Required for role-based approval steps.", example = "6")
     private String actorRoleId;

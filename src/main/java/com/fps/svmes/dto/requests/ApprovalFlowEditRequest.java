@@ -23,10 +23,6 @@ public class ApprovalFlowEditRequest {
     @Schema(description = "MES user id of the actor editing the approval flow.", example = "274")
     private Long userId;
 
-    @NotNull(message = "expectedFormSubmissionVersion is required")
-    @Schema(description = "Form submission version expected by the client. Used to reject stale mutations.", example = "1")
-    private Integer expectedFormSubmissionVersion;
-
     @Schema(description = "Optional audit comment explaining why the approval flow is being changed.", example = "Updated approvers after role reassignment.")
     private String comment;
 

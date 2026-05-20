@@ -144,8 +144,7 @@ public class QcTaskSubmissionLogsController {
             @PathVariable String submissionId,
             @RequestParam Long qcFormTemplateId,
             @RequestParam String createdAt,
-            @RequestParam Long actorUserId,
-            @RequestParam Integer expectedFormSubmissionVersion) {
+            @RequestParam Long actorUserId) {
         try {
             // determine the form_template_{id}_{YYYYMM} collection to look for according to createdAt example createdAt string 2025-02-05 19:31:58
             String collectionName = "form_template_" + qcFormTemplateId + "_" + createdAt.substring(0, 7).replace("-", "");
@@ -153,7 +152,6 @@ public class QcTaskSubmissionLogsController {
             request.setSubmissionId(submissionId);
             request.setCollectionName(collectionName);
             request.setActorUserId(actorUserId);
-            request.setExpectedFormSubmissionVersion(expectedFormSubmissionVersion);
             qcTaskSubmissionLogsService.deleteSubmissionLog(request);
             return ResponseEntity.ok("Submission log deleted successfully");
         } catch (IllegalStateException e) {

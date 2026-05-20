@@ -1059,7 +1059,7 @@ public class ReportingServiceImpl implements ReportingService {
     private boolean containsSearchInVisibleFields(Document doc, String searchLower) {
         Set<String> excludedFields = Set.of(
                 "created_by", "created_at", "exceeded_info", "approval_info", "e-signature",
-                "version", "version_group_id", "approver_updated_at"
+                "version", "version_group_id", "approver_updated_at", "updated_at", "state"
         );
 
         for (String key : doc.keySet()) {

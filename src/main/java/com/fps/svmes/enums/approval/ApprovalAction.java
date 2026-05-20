@@ -5,11 +5,6 @@ public enum ApprovalAction {
     RECALLED,
     FLOW_EDITED,
     APPROVED,
-    AUTO_APPROVED,
     FORWARDED,
-    REQUESTED_CORRECTION,
-    REJECTED_FULL_RESET,  // Legacy state
-    REJECTED_PARTIAL_RESET,  // Legacy state
-    REJECTED_DISCARD,  // Legacy state
-    DISCARD
+    REQUESTED_CORRECTION
 }

@@ -24,7 +24,6 @@ public interface QcFormDataService {
      * retains archived prior versions as archived while moving other prior versions back to submitted.
      */
     Map<String, Object> editFormData(String collectionName, Long userId, String parentSubmissionId, Long formTemplateId,
-                                     Integer expectedFormSubmissionVersion,
                                      Map<String, Object> updatedData);
 
     /**

@@ -168,7 +168,6 @@ public class ApprovalInstanceController {
                                       "submissionId": "69d44796b8b3934d9cb382f7",
                                       "collectionName": "form_template_695_202604",
                                       "actorUserId": 274,
-                                      "expectedFormSubmissionVersion": 1,
                                       "comment": "open approval detail"
                                     }
                                     """
@@ -211,7 +210,6 @@ public class ApprovalInstanceController {
                                       "submissionId": "69d44796b8b3934d9cb382f7",
                                       "collectionName": "form_template_695_202604",
                                       "actorUserId": 274,
-                                      "expectedFormSubmissionVersion": 1,
                                       "comment": "close approval detail"
                                     }
                                     """
@@ -254,7 +252,6 @@ public class ApprovalInstanceController {
                                       "submissionId": "69d44796b8b3934d9cb382f7",
                                       "collectionName": "form_template_695_202604",
                                       "actorUserId": 274,
-                                      "expectedFormSubmissionVersion": 1,
                                       "actorRoleId": "6",
                                       "comment": "approve from role id 6",
                                       "suggestRetest": false

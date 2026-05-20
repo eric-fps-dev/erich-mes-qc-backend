@@ -94,9 +94,7 @@ public class QcFormTemplateServiceImpl implements QcFormTemplateService {
         if (dto.getApprovalType() != null) {
             template.setApprovalType(dto.getApprovalType());
         }
-        if (dto.getApprovalTemplateId() != null) {
-            template.setApprovalTemplateId(dto.getApprovalTemplateId());
-        }
+        template.setApprovalTemplateId(dto.getApprovalTemplateId());
         template.setUpdatedAt(OffsetDateTime.now());
         template.setUpdatedBy(dto.getUpdatedBy());
 

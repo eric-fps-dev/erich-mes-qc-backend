@@ -79,7 +79,6 @@ public class QcFormDataController {
             @PathVariable Long userId,
             @RequestParam("parentId") String parentSubmissionId,
             @RequestParam("templateId") Long formTemplateId,
-            @RequestParam("expectedFormSubmissionVersion") Integer expectedFormSubmissionVersion,
             @RequestBody Map<String, Object> updatedData) {
         try {
             return ResponseResult.of(
@@ -88,7 +87,6 @@ public class QcFormDataController {
                             userId,
                             parentSubmissionId,
                             formTemplateId,
-                            expectedFormSubmissionVersion,
                             updatedData
                     ),
                     ResponseStatus.SUCCESS
