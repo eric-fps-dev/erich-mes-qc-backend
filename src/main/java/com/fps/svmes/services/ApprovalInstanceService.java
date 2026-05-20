@@ -1,5 +1,6 @@
 package com.fps.svmes.services;
 
+import com.fps.svmes.dto.LegacyMigrationResult;
 import com.fps.svmes.dto.requests.ApprovalFlowEditRequest;
 import com.fps.svmes.dto.requests.FormSubmissionActionRequest;
 import com.fps.svmes.models.nosql.approval.ApprovalInstance;
@@ -54,6 +55,11 @@ public interface ApprovalInstanceService {
      * Requests correction and moves the form submission to pending revision.
      */
     void requestCorrection(FormSubmissionActionRequest request);
+
+    /**
+     * Creates missing approval instances for legacy form submissions across existing form collections.
+     */
+    LegacyMigrationResult backfillMissingApprovalInstances();
 
     /**
      * Returns the approval instance attached to a form submission.

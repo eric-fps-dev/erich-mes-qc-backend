@@ -2,6 +2,7 @@ package com.fps.svmes.controllers;
 
 import com.fps.shared.dto.responses.ResponseResult;
 import com.fps.shared.dto.responses.ResponseStatus;
+import com.fps.svmes.dto.LegacyMigrationResult;
 import com.fps.svmes.dto.PagedResultDTO;
 import com.fps.svmes.dto.dtos.approval.ApprovalInstanceDTO;
 import com.fps.svmes.dto.dtos.approval.ApprovalInstanceListItemDTO;
@@ -319,6 +320,27 @@ public class ApprovalInstanceController {
         } catch (Exception e) {
             log.error("Error requesting correction", e);
             return ResponseResult.fail("Error requesting correction: " + e.getMessage(), ResponseStatus.INTERNAL_SERVER_ERROR, e);
+        }
+    }
+
+    @PostMapping("/approval-instances/backfill-missing")
+    @Operation(
+            summary = "Backfill missing approval instances",
+            description = "Creates ApprovalInstance documents for existing form submissions that do not already "
+                    + "have one paired. Approval steps are sourced from the form template approvalTemplateId "
+                    + "using the normal approval-instance creation flow. Idempotent - already-paired submissions "
+                    + "are counted as skipped."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Backfill completed; check totalFailed and failures for partial errors"),
+            @ApiResponse(responseCode = "500", description = "Unexpected error during approval-instance backfill")
+    })
+    public ResponseEntity<ResponseResult<LegacyMigrationResult>> backfillMissingApprovalInstances() {
+        try {
+            return ResponseResult.of(approvalInstanceService.backfillMissingApprovalInstances(), ResponseStatus.SUCCESS);
+        } catch (Exception e) {
+            log.error("Approval instance backfill failed", e);
+            return ResponseResult.fail("Approval instance backfill failed: " + e.getMessage(), ResponseStatus.INTERNAL_SERVER_ERROR, e);
         }
     }
 

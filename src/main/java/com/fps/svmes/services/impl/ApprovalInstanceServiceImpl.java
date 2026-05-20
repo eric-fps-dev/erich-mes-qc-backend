@@ -4,6 +4,7 @@ import com.fps.shared.entity.primary.approval.ApprovalStep;
 import com.fps.shared.entity.primary.approval.ApprovalTemplate;
 import com.fps.shared.entity.primary.rbac.Role;
 import com.fps.shared.entity.primary.user.User;
+import com.fps.svmes.dto.LegacyMigrationResult;
 import com.fps.svmes.dto.requests.ApprovalStepRequest;
 import com.fps.svmes.dto.requests.ApprovalFlowEditRequest;
 import com.fps.svmes.dto.requests.FormSubmissionActionRequest;
@@ -24,6 +25,11 @@ import com.fps.svmes.services.FormSubmissionStateUpdater;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.bson.Document;
+import org.bson.types.ObjectId;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -41,6 +47,10 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 @Slf4j
 public class ApprovalInstanceServiceImpl implements ApprovalInstanceService {
+    private static final int BACKFILL_BATCH_SIZE = 200;
+    private static final String FORM_COLLECTION_PREFIX = "form_template_";
+
+    private final MongoTemplate mongoTemplate;
     private final ApprovalInstanceRepository approvalInstanceRepository;
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
@@ -262,7 +272,7 @@ public class ApprovalInstanceServiceImpl implements ApprovalInstanceService {
 
     @Override
     public void requestCorrection(FormSubmissionActionRequest request) {
-        ActionableInstance actionable = resolveActionableInstance(request.getSubmissionId(), request.getCollectionName());
+        ActionableInstance actionable = resolveCorrectionActionableInstance(request);
         ApprovalInstance instance = actionable.instance();
         Document formSubmission = actionable.formSubmission();
         Long updatedBy = request.getActorUserId();
@@ -290,6 +300,57 @@ public class ApprovalInstanceServiceImpl implements ApprovalInstanceService {
             saveInstance(instance);
             throw rollbackFailure(e);
         }
+    }
+
+    @Override
+    public LegacyMigrationResult backfillMissingApprovalInstances() {
+        int totalProcessed = 0;
+        int totalMigrated = 0;
+        int totalSkipped = 0;
+        int totalFailed = 0;
+        List<LegacyMigrationResult.FailedRecord> failures = new ArrayList<>();
+
+        List<String> formCollections = mongoTemplate.getCollectionNames().stream()
+                .filter(name -> name.startsWith(FORM_COLLECTION_PREFIX))
+                .sorted()
+                .toList();
+
+        log.info("Approval-instance backfill starting: {} form collections found", formCollections.size());
+
+        for (String collectionName : formCollections) {
+            ObjectId lastSeenId = null;
+            while (true) {
+                List<Document> batch = fetchBackfillBatch(collectionName, lastSeenId);
+                if (batch.isEmpty()) {
+                    break;
+                }
+
+                for (Document submission : batch) {
+                    totalProcessed++;
+                    String submissionId = submission.getObjectId("_id").toString();
+                    try {
+                        if (pairBackfillSubmissionIfMissing(submission, collectionName)) {
+                            totalMigrated++;
+                        } else {
+                            totalSkipped++;
+                        }
+                    } catch (Exception e) {
+                        totalFailed++;
+                        failures.add(new LegacyMigrationResult.FailedRecord(collectionName, submissionId, e.getMessage()));
+                        log.error("Approval-instance backfill failed for submission {} in {}", submissionId, collectionName, e);
+                    }
+                    lastSeenId = submission.getObjectId("_id");
+                }
+
+                if (batch.size() < BACKFILL_BATCH_SIZE) {
+                    break;
+                }
+            }
+        }
+
+        log.info("Approval-instance backfill complete - processed={} migrated={} skipped={} failed={}",
+                totalProcessed, totalMigrated, totalSkipped, totalFailed);
+        return new LegacyMigrationResult(totalProcessed, totalMigrated, totalSkipped, totalFailed, failures);
     }
 
     @Override
@@ -321,6 +382,70 @@ public class ApprovalInstanceServiceImpl implements ApprovalInstanceService {
     private ActionableInstance resolveActionableInstance(String submissionId, String collectionName) {
         ApprovalInstance instance = getByFormSubmission(submissionId, collectionName);
         return new ActionableInstance(instance, latestFormSubmission(instance));
+    }
+
+    private boolean pairBackfillSubmissionIfMissing(Document submission, String collectionName) {
+        String submissionId = submission.getObjectId("_id").toString();
+        if (approvalInstanceRepository.findByFormSubmissionIdAndFormSubmissionCollectionName(submissionId, collectionName).isPresent()) {
+            return false;
+        }
+
+        Long formTemplateId = resolveFormTemplateId(submission, collectionName);
+        String approvalTemplateId = resolveApprovalTemplateId(formTemplateId);
+        Long createdBy = asLong(submission.get("created_by"));
+        create(submissionId, collectionName, formTemplateId, approvalTemplateId, createdBy);
+        return true;
+    }
+
+    private ActionableInstance resolveCorrectionActionableInstance(FormSubmissionActionRequest request) {
+        Document formSubmission = latestFormSubmission(request.getSubmissionId(), request.getCollectionName());
+        ApprovalInstance instance = approvalInstanceRepository
+                .findByFormSubmissionIdAndFormSubmissionCollectionName(request.getSubmissionId(), request.getCollectionName())
+                .orElseGet(() -> createMissingApprovalInstanceForCorrection(request, formSubmission));
+        return new ActionableInstance(instance, formSubmission);
+    }
+
+    private ApprovalInstance createMissingApprovalInstanceForCorrection(FormSubmissionActionRequest request, Document formSubmission) {
+        Long formTemplateId = resolveFormTemplateId(formSubmission, request.getCollectionName());
+        String approvalTemplateId = resolveApprovalTemplateId(formTemplateId);
+        return create(
+                request.getSubmissionId(),
+                request.getCollectionName(),
+                formTemplateId,
+                approvalTemplateId,
+                request.getActorUserId()
+        );
+    }
+
+    private Long resolveFormTemplateId(Document formSubmission, String collectionName) {
+        Long formTemplateId = asLong(formSubmission.get("form_template_id"));
+        if (formTemplateId != null) {
+            return formTemplateId;
+        }
+        String[] parts = collectionName.split("_");
+        if (parts.length >= 3) {
+            try {
+                return Long.parseLong(parts[2]);
+            } catch (NumberFormatException ignored) {
+                // Fall through to the workflow-specific error below.
+            }
+        }
+        throw new ApprovalInstanceException("Unable to resolve form template id for form submission: " + asString(formSubmission.get("_id")));
+    }
+
+    private String resolveApprovalTemplateId(Long formTemplateId) {
+        Document formTemplateSnapshot = formSubmissionStateUpdater.getFormTemplateSnapshot(String.valueOf(formTemplateId));
+        return formTemplateSnapshot == null ? null : asString(formTemplateSnapshot.get("approval_template_id"));
+    }
+
+    private List<Document> fetchBackfillBatch(String collectionName, ObjectId lastSeenId) {
+        Query query = new Query();
+        if (lastSeenId != null) {
+            query.addCriteria(Criteria.where("_id").gt(lastSeenId));
+        }
+        query.with(Sort.by(Sort.Direction.ASC, "_id"));
+        query.limit(BACKFILL_BATCH_SIZE);
+        return mongoTemplate.find(query, Document.class, collectionName);
     }
 
     private boolean hasNoApprovalSteps(ApprovalInstance instance) {
@@ -722,7 +847,7 @@ public class ApprovalInstanceServiceImpl implements ApprovalInstanceService {
                 return FormSubmissionState.ARCHIVED;
             }
         }
-        return FormSubmissionState.ARCHIVED;;
+        return FormSubmissionState.ARCHIVED;
     }
 
     private void touch(ApprovalInstance instance, Long updatedBy) {
