@@ -2,15 +2,8 @@ package com.fps.svmes.controllers;
 
 import com.fps.shared.dto.responses.ResponseResult;
 import com.fps.shared.dto.responses.ResponseStatus;
-import com.fps.svmes.constants.FormSubmissionLockHeaders;
-import com.fps.svmes.dto.requests.FormSubmissionLockAcquireRequest;
 import com.fps.svmes.dto.requests.FormSubmissionActionRequest;
-import com.fps.svmes.dto.requests.FormSubmissionLockHeartbeatRequest;
-import com.fps.svmes.dto.requests.FormSubmissionLockReleaseRequest;
-import com.fps.svmes.dto.requests.FormSubmissionLockStatusRequest;
-import com.fps.svmes.dto.responses.FormSubmissionLockResponse;
 import com.fps.svmes.exceptions.ApprovalInstanceException;
-import com.fps.svmes.services.FormSubmissionLockService;
 import com.fps.svmes.services.QcFormDataService;
 import com.fps.svmes.services.QcTaskSubmissionLogsService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -24,7 +17,6 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.bson.Document;
-import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -43,8 +35,6 @@ public class QcFormDataController {
 
     private final QcFormDataService qcFormDataService;
     private final QcTaskSubmissionLogsService qcTaskSubmissionLogsService;
-    private final FormSubmissionLockService formSubmissionLockService;
-
     @PostMapping("/insert-form/{userId}/{collectionName}")
     @Operation(
             summary = "Create form submission",
@@ -90,7 +80,6 @@ public class QcFormDataController {
             @RequestParam("parentId") String parentSubmissionId,
             @RequestParam("templateId") Long formTemplateId,
             @RequestParam("expectedFormSubmissionVersion") Integer expectedFormSubmissionVersion,
-            @RequestHeader(FormSubmissionLockHeaders.LOCK_TOKEN) String lockToken,
             @RequestBody Map<String, Object> updatedData) {
         try {
             return ResponseResult.of(
@@ -100,7 +89,6 @@ public class QcFormDataController {
                             parentSubmissionId,
                             formTemplateId,
                             expectedFormSubmissionVersion,
-                            lockToken,
                             updatedData
                     ),
                     ResponseStatus.SUCCESS
@@ -125,11 +113,8 @@ public class QcFormDataController {
             @ApiResponse(responseCode = "200", description = "Form submission deleted successfully"),
             @ApiResponse(responseCode = "500", description = "Unexpected error deleting form submission")
     })
-    public ResponseEntity<ResponseResult<String>> deleteFormSubmission(
-            @RequestHeader(FormSubmissionLockHeaders.LOCK_TOKEN) String lockToken,
-            @Valid @RequestBody FormSubmissionActionRequest request) {
+    public ResponseEntity<ResponseResult<String>> deleteFormSubmission(@Valid @RequestBody FormSubmissionActionRequest request) {
         try {
-            request.setLockToken(lockToken);
             qcTaskSubmissionLogsService.deleteSubmissionLog(request);
             return ResponseResult.of("Form submission deleted successfully", ResponseStatus.SUCCESS);
         } catch (IllegalStateException | ApprovalInstanceException e) {
@@ -162,47 +147,6 @@ public class QcFormDataController {
             log.error("Error retrieving version history", e);
             return ResponseResult.fail("Error retrieving version history: " + e.getMessage(), ResponseStatus.INTERNAL_SERVER_ERROR, e);
         }
-    }
-
-    @PostMapping("/locks/acquire")
-    public ResponseEntity<com.fps.svmes.dto.responses.ResponseResult<FormSubmissionLockResponse>> acquireLock(@Valid @RequestBody FormSubmissionLockAcquireRequest request) {
-        return ResponseEntity.ok()
-                .cacheControl(CacheControl.noStore())
-                .body(com.fps.svmes.dto.responses.ResponseResult.success(formSubmissionLockService.acquireLock(request)));
-    }
-
-    @PostMapping("/locks/heartbeat")
-    public ResponseEntity<com.fps.svmes.dto.responses.ResponseResult<FormSubmissionLockResponse>> heartbeatLock(@Valid @RequestBody FormSubmissionLockHeartbeatRequest request) {
-        return ResponseEntity.ok()
-                .cacheControl(CacheControl.noStore())
-                .body(com.fps.svmes.dto.responses.ResponseResult.success(formSubmissionLockService.renewLock(request)));
-    }
-
-    @PostMapping("/locks/release")
-    public ResponseEntity<com.fps.svmes.dto.responses.ResponseResult<FormSubmissionLockResponse>> releaseLock(@Valid @RequestBody FormSubmissionLockReleaseRequest request) {
-        return ResponseEntity.ok()
-                .cacheControl(CacheControl.noStore())
-                .body(com.fps.svmes.dto.responses.ResponseResult.success(formSubmissionLockService.releaseLock(request)));
-    }
-
-    @GetMapping("/locks/status")
-    public ResponseEntity<com.fps.svmes.dto.responses.ResponseResult<FormSubmissionLockResponse>> getLockStatus(
-            @RequestParam String submissionId,
-            @RequestParam String collectionName,
-            @RequestParam Long actorUserId,
-            @RequestParam(required = false) List<String> actorRoleIds,
-            @RequestParam(required = false) String sessionId,
-            @RequestParam com.fps.svmes.enums.form.FormSubmissionLockPurpose lockPurpose) {
-        FormSubmissionLockStatusRequest request = new FormSubmissionLockStatusRequest();
-        request.setSubmissionId(submissionId);
-        request.setCollectionName(collectionName);
-        request.setActorUserId(actorUserId);
-        request.setActorRoleIds(actorRoleIds);
-        request.setSessionId(sessionId);
-        request.setLockPurpose(lockPurpose);
-        return ResponseEntity.ok()
-                .cacheControl(CacheControl.noStore())
-                .body(com.fps.svmes.dto.responses.ResponseResult.success(formSubmissionLockService.getLockStatus(request)));
     }
 
 }

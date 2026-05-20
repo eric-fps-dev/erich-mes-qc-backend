@@ -56,10 +56,10 @@ public class FormSubmissionActionRequest {
     private String comment;
 
     @Schema(
-            description = "Optional resume step index used only by the request-correction action. Must be between 0 and the current step index when provided.",
-            example = "0"
+            description = "Optional. When true, request-correction resets the approval flow back to the first step. Defaults to false.",
+            example = "false"
     )
-    private Integer resumedStepIndex;
+    private Boolean resetApprovalSteps;
 
     @Schema(
             description = "Optional retest recommendation captured for approve, forward, and request-correction workflow actions.",
@@ -70,10 +70,4 @@ public class FormSubmissionActionRequest {
     @JsonProperty("eSignature")
     @Schema(description = "Optional signature or e-signature payload captured with the action.", example = "Justin Li")
     private String eSignature;
-
-    @Schema(description = "Optional. When true, suppress approval action-log writes and approval-step mutation for review entry/exit guard operations.", example = "false")
-    private Boolean omitApprovalActionLog;
-
-    @Schema(description = "Active form-submission lock token supplied via request header.", accessMode = Schema.AccessMode.READ_ONLY)
-    private String lockToken;
 }

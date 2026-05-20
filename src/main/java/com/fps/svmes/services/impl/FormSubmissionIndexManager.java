@@ -1,6 +1,5 @@
 package com.fps.svmes.services.impl;
 
-import com.fps.svmes.models.nosql.FormSubmissionLock;
 import com.fps.svmes.models.nosql.approval.ApprovalInstance;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
@@ -34,7 +33,6 @@ public class FormSubmissionIndexManager {
     @PostConstruct
     public void ensureExistingIndexes() {
         ensureApprovalInstanceIndexes();
-        ensureFormSubmissionLockIndexes();
         for (String collectionName : mongoTemplate.getCollectionNames()) {
             if (FORM_COLLECTION_PATTERN.matcher(collectionName).matches()) {
                 ensureFormSubmissionIndexes(collectionName);
@@ -117,16 +115,4 @@ public class FormSubmissionIndexManager {
         }
     }
 
-    private void ensureFormSubmissionLockIndexes() {
-        IndexOperations indexOps = mongoTemplate.indexOps(FormSubmissionLock.class);
-        indexOps.ensureIndex(new Index()
-                .on("submissionId", Sort.Direction.ASC)
-                .on("collectionName", Sort.Direction.ASC)
-                .unique()
-                .named("ux_submission_collection"));
-        indexOps.ensureIndex(new Index()
-                .on("expiresAt", Sort.Direction.ASC)
-                .expire(0)
-                .named("idx_submission_lock_expires_at"));
-    }
 }

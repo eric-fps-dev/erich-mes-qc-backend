@@ -2,7 +2,6 @@ package com.fps.svmes.controllers;
 
 import com.fps.shared.dto.responses.ResponseResult;
 import com.fps.shared.dto.responses.ResponseStatus;
-import com.fps.svmes.constants.FormSubmissionLockHeaders;
 import com.fps.svmes.dto.PagedResultDTO;
 import com.fps.svmes.dto.dtos.approval.ApprovalInstanceDTO;
 import com.fps.svmes.dto.dtos.approval.ApprovalInstanceListItemDTO;
@@ -153,7 +152,7 @@ public class ApprovalInstanceController {
     @Operation(
             summary = "Enter review",
             description = "Moves a submitted or pending revision form submission into under-review state. "
-                    + "When omitApprovalActionLog=true, this acts as a UI review guard only and will not write approval action logs or mutate approval-step state."
+                    + "Use this endpoint to submit or resubmit a record when it is ready for approval."
     )
     @io.swagger.v3.oas.annotations.parameters.RequestBody(
             required = true,
@@ -181,11 +180,8 @@ public class ApprovalInstanceController {
             @ApiResponse(responseCode = "409", description = "State is invalid or the submitted versions are stale"),
             @ApiResponse(responseCode = "500", description = "Unexpected error entering review")
     })
-    public ResponseEntity<ResponseResult<String>> enterReview(
-            @RequestHeader(FormSubmissionLockHeaders.LOCK_TOKEN) String lockToken,
-            @Valid @RequestBody FormSubmissionActionRequest request) {
+    public ResponseEntity<ResponseResult<String>> enterReview(@Valid @RequestBody FormSubmissionActionRequest request) {
         try {
-            request.setLockToken(lockToken);
             approvalInstanceService.enterReview(request);
             return ResponseResult.of("Form submission entered review successfully", ResponseStatus.SUCCESS);
         } catch (IllegalStateException | ApprovalInstanceException e) {
@@ -199,9 +195,7 @@ public class ApprovalInstanceController {
     @PostMapping("/exit-review")
     @Operation(
             summary = "Exit review",
-            description = "Exits a review guard from under-review state. "
-                    + "If approval-instance action history already exists, the form remains under review. "
-                    + "When omitApprovalActionLog=true, this acts as a UI review-close path and will not write approval action logs or mutate approval-step state."
+            description = "Moves an under-review form submission back to submitted state and resets the approval flow to the first step."
     )
     @io.swagger.v3.oas.annotations.parameters.RequestBody(
             required = true,
@@ -218,7 +212,6 @@ public class ApprovalInstanceController {
                                       "collectionName": "form_template_695_202604",
                                       "actorUserId": 274,
                                       "expectedFormSubmissionVersion": 1,
-                                      "omitApprovalActionLog": true,
                                       "comment": "close approval detail"
                                     }
                                     """
@@ -230,11 +223,8 @@ public class ApprovalInstanceController {
             @ApiResponse(responseCode = "409", description = "State is invalid or the submitted versions are stale"),
             @ApiResponse(responseCode = "500", description = "Unexpected error exiting review")
     })
-    public ResponseEntity<ResponseResult<String>> exitReview(
-            @RequestHeader(FormSubmissionLockHeaders.LOCK_TOKEN) String lockToken,
-            @Valid @RequestBody FormSubmissionActionRequest request) {
+    public ResponseEntity<ResponseResult<String>> exitReview(@Valid @RequestBody FormSubmissionActionRequest request) {
         try {
-            request.setLockToken(lockToken);
             approvalInstanceService.exitReview(request);
             return ResponseResult.of("Form submission exited review successfully", ResponseStatus.SUCCESS);
         } catch (IllegalStateException | ApprovalInstanceException e) {
@@ -278,11 +268,8 @@ public class ApprovalInstanceController {
             @ApiResponse(responseCode = "409", description = "Actor does not match the current step, state is invalid, or submitted versions are stale"),
             @ApiResponse(responseCode = "500", description = "Unexpected error approving form submission")
     })
-    public ResponseEntity<ResponseResult<String>> approve(
-            @RequestHeader(FormSubmissionLockHeaders.LOCK_TOKEN) String lockToken,
-            @Valid @RequestBody FormSubmissionActionRequest request) {
+    public ResponseEntity<ResponseResult<String>> approve(@Valid @RequestBody FormSubmissionActionRequest request) {
         try {
-            request.setLockToken(lockToken);
             approvalInstanceService.approve(request);
             return ResponseResult.of("Form submission approved successfully", ResponseStatus.SUCCESS);
         } catch (IllegalStateException | ApprovalInstanceException e) {
@@ -303,11 +290,8 @@ public class ApprovalInstanceController {
             @ApiResponse(responseCode = "409", description = "No next step, actor mismatch, invalid state, or stale submitted versions"),
             @ApiResponse(responseCode = "500", description = "Unexpected error forwarding form submission")
     })
-    public ResponseEntity<ResponseResult<String>> forward(
-            @RequestHeader(FormSubmissionLockHeaders.LOCK_TOKEN) String lockToken,
-            @Valid @RequestBody FormSubmissionActionRequest request) {
+    public ResponseEntity<ResponseResult<String>> forward(@Valid @RequestBody FormSubmissionActionRequest request) {
         try {
-            request.setLockToken(lockToken);
             approvalInstanceService.forward(request);
             return ResponseResult.of("Form submission forwarded to next approval step", ResponseStatus.SUCCESS);
         } catch (IllegalStateException | ApprovalInstanceException e) {
@@ -321,18 +305,16 @@ public class ApprovalInstanceController {
     @PostMapping("/approval/request-correction")
     @Operation(
             summary = "Request correction",
-            description = "Requests correction on the current approval step, moves the form submission to pending revision, and can optionally resume from an earlier or current step index."
+            description = "Requests correction on the current approval step and moves the form submission to pending revision. "
+                    + "Optionally reset the approval flow back to the first step."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Correction requested successfully"),
             @ApiResponse(responseCode = "409", description = "Invalid approval state or stale submitted versions"),
             @ApiResponse(responseCode = "500", description = "Unexpected error requesting correction")
     })
-    public ResponseEntity<ResponseResult<String>> requestCorrection(
-            @RequestHeader(FormSubmissionLockHeaders.LOCK_TOKEN) String lockToken,
-            @Valid @RequestBody FormSubmissionActionRequest request) {
+    public ResponseEntity<ResponseResult<String>> requestCorrection(@Valid @RequestBody FormSubmissionActionRequest request) {
         try {
-            request.setLockToken(lockToken);
             approvalInstanceService.requestCorrection(request);
             return ResponseResult.of("Correction requested successfully", ResponseStatus.SUCCESS);
         } catch (IllegalStateException | ApprovalInstanceException e) {
@@ -387,11 +369,8 @@ public class ApprovalInstanceController {
             @ApiResponse(responseCode = "409", description = "Approval flow cannot be edited in the current state"),
             @ApiResponse(responseCode = "500", description = "Unexpected error editing approval flow")
     })
-    public ResponseEntity<ResponseResult<Document>> editApprovalFlow(
-            @RequestHeader(FormSubmissionLockHeaders.LOCK_TOKEN) String lockToken,
-            @Valid @RequestBody ApprovalFlowEditRequest request) {
+    public ResponseEntity<ResponseResult<Document>> editApprovalFlow(@Valid @RequestBody ApprovalFlowEditRequest request) {
         try {
-            request.setLockToken(lockToken);
             return ResponseResult.of(qcFormDataService.editApprovalFlow(request), ResponseStatus.SUCCESS);
         } catch (IllegalStateException | ApprovalInstanceException e) {
             return ResponseResult.fail(e.getMessage(), ResponseStatus.CONFLICT, e);

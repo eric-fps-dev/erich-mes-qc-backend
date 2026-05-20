@@ -38,7 +38,4 @@ public class ApprovalFlowEditRequest {
             schema = @Schema(implementation = ApprovalStepRequest.class)
     )
     private List<@Valid ApprovalStepRequest> steps;
-
-    @Schema(description = "Active form-submission lock token supplied via request header.", accessMode = Schema.AccessMode.READ_ONLY)
-    private String lockToken;
 }

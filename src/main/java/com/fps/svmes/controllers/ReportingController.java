@@ -32,10 +32,9 @@ public class ReportingController {
     public List<WidgetDataDTO> extractWidgetDataWithCounts(
             @RequestParam Long formTemplateId,
             @RequestParam(required = false) String startDateTime,
-            @RequestParam(required = false) String endDateTime,
-            @RequestParam(required = false) List<String> submissionStates
+            @RequestParam(required = false) String endDateTime
     ) {
-        return reportingService.extractWidgetDataWithCounts(formTemplateId, startDateTime, endDateTime, submissionStates);
+        return reportingService.extractWidgetDataWithCounts(formTemplateId, startDateTime, endDateTime);
     }
 
     /**
@@ -49,8 +48,7 @@ public class ReportingController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "15") int size,
             @RequestParam(required = false) String sort,
-            @RequestParam(required = false) String search,
-            @RequestParam(required = false) List<String> submissionStates
+            @RequestParam(required = false) String search
     ) {
         return reportingService.fetchQcRecordsPaged(
                 formTemplateId,
@@ -59,8 +57,7 @@ public class ReportingController {
                 page,
                 size,
                 sort,
-                search,
-                submissionStates
+                search
         );
     }
 
@@ -70,11 +67,10 @@ public class ReportingController {
             @RequestParam String startDateTime,
             @RequestParam String endDateTime,
             @RequestParam(required = false) String search,
-            @RequestParam(required = false) String sort,
-            @RequestParam(required = false) List<String> submissionStates) {
+            @RequestParam(required = false) String sort) {
 
         List<Document> allRecords = reportingService.fetchAllRecordsWithoutPagination(
-                formTemplateId, startDateTime, endDateTime, search, sort, submissionStates);
+                formTemplateId, startDateTime, endDateTime, search, sort);
 
         return ResponseEntity.ok(allRecords);
     }
@@ -143,8 +139,7 @@ public class ReportingController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "15") int size,
             @RequestParam(required = false) String sort,
-            @RequestParam(required = false) String search,
-            @RequestParam(required = false) List<String> submissionStates
+            @RequestParam(required = false) String search
     ) {
         return reportingService.fetchDrilldownRecords(
                 formTemplateId,
@@ -157,8 +152,7 @@ public class ReportingController {
                 page,
                 size,
                 sort,
-                search,
-                submissionStates
+                search
         );
     }
 

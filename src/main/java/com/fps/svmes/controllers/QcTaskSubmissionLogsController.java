@@ -1,6 +1,5 @@
 package com.fps.svmes.controllers;
 
-import com.fps.svmes.constants.FormSubmissionLockHeaders;
 import com.fps.svmes.dto.dtos.qcForm.QcTaskSubmissionLogsDTO;
 import com.fps.svmes.dto.requests.FormSubmissionActionRequest;
 import com.fps.svmes.dto.responses.ResponseResult;
@@ -146,8 +145,7 @@ public class QcTaskSubmissionLogsController {
             @RequestParam Long qcFormTemplateId,
             @RequestParam String createdAt,
             @RequestParam Long actorUserId,
-            @RequestParam Integer expectedFormSubmissionVersion,
-            @RequestHeader(FormSubmissionLockHeaders.LOCK_TOKEN) String lockToken) {
+            @RequestParam Integer expectedFormSubmissionVersion) {
         try {
             // determine the form_template_{id}_{YYYYMM} collection to look for according to createdAt example createdAt string 2025-02-05 19:31:58
             String collectionName = "form_template_" + qcFormTemplateId + "_" + createdAt.substring(0, 7).replace("-", "");
@@ -156,7 +154,6 @@ public class QcTaskSubmissionLogsController {
             request.setCollectionName(collectionName);
             request.setActorUserId(actorUserId);
             request.setExpectedFormSubmissionVersion(expectedFormSubmissionVersion);
-            request.setLockToken(lockToken);
             qcTaskSubmissionLogsService.deleteSubmissionLog(request);
             return ResponseEntity.ok("Submission log deleted successfully");
         } catch (IllegalStateException e) {

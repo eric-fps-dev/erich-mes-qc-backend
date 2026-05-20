@@ -19,7 +19,6 @@ import com.fps.svmes.services.ApprovalInfoGeneratorService;
 import com.fps.svmes.services.ApprovalInstanceService;
 import com.fps.svmes.services.ControlLimitEvaluationService;
 import com.fps.svmes.services.FormNotificationConfigService;
-import com.fps.svmes.services.FormSubmissionMutationGuard;
 import com.fps.svmes.services.QcFormDataService;
 import com.fps.svmes.services.QcFormTemplateService;
 import com.fps.svmes.services.QcSnapshotSubmissionService;
@@ -69,7 +68,6 @@ public class QcFormDataServiceImpl implements QcFormDataService {
     private final FormNotificationConfigService formNotificationConfigService;
     private final FormSubmissionIndexManager formSubmissionIndexManager;
     private final SubmissionApprovalModelResolver approvalModelResolver;
-    private final FormSubmissionMutationGuard formSubmissionMutationGuard;
 
     @Override
     public Map<String, Object> insertFormData(String collectionName, Long userId, Map<String, Object> formData, boolean submitForApproval) {
@@ -156,18 +154,9 @@ public class QcFormDataServiceImpl implements QcFormDataService {
 
     @Override
     public Map<String, Object> editFormData(String collectionName, Long userId, String parentSubmissionId, Long formTemplateId,
-                                            Integer expectedFormSubmissionVersion, String lockToken,
+                                            Integer expectedFormSubmissionVersion,
                                             Map<String, Object> updatedData) {
-        com.fps.svmes.dto.requests.FormSubmissionActionRequest actionRequest =
-                new com.fps.svmes.dto.requests.FormSubmissionActionRequest();
-        actionRequest.setSubmissionId(parentSubmissionId);
-        actionRequest.setCollectionName(collectionName);
-        actionRequest.setActorUserId(userId);
-        actionRequest.setExpectedFormSubmissionVersion(expectedFormSubmissionVersion);
-        actionRequest.setLockToken(lockToken);
-        var guardContext = formSubmissionMutationGuard.validateEditMutation(actionRequest);
-        Document parent = guardContext.target().submission();
-        collectionName = guardContext.target().collectionName();
+        Document parent = findSubmission(parentSubmissionId, collectionName);
         Date now = new Date();
 
         ApprovalModel parentModel = approvalModelResolver.resolveApprovalModel(parent);

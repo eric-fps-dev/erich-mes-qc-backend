@@ -2,10 +2,8 @@ package com.fps.svmes.controllers;
 
 import com.fps.shared.dto.responses.ResponseResult;
 import com.fps.shared.dto.responses.ResponseStatus;
-import com.fps.svmes.dto.ApprovalInstanceSnapshotBackfillResult;
 import com.fps.svmes.dto.LegacyMigrationResult;
-import com.fps.svmes.services.ApprovalInstanceSnapshotBackfillService;
-import com.fps.svmes.services.LegacyApprovalMigrationService;
+import com.fps.svmes.services.ApprovalInstanceBackfillService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -24,49 +22,27 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "Migration API", description = "One-shot data migration endpoints")
 public class MigrationController {
 
-    private final LegacyApprovalMigrationService legacyApprovalMigrationService;
-    private final ApprovalInstanceSnapshotBackfillService approvalInstanceSnapshotBackfillService;
+    private final ApprovalInstanceBackfillService approvalInstanceBackfillService;
 
-    @PostMapping("/legacy-approval")
+    @PostMapping("/approval-instances/backfill-missing")
     @Operation(
-            summary = "Migrate legacy approval data to V2",
-            description = "Backfills ApprovalInstance documents for all LEGACY form submissions that lack one, "
-                    + "then stamps approvalModel='v2' and the inferred state on each migrated form document. "
-                    + "Idempotent — already-migrated submissions are counted as skipped and not modified. "
-                    + "flow_1 submissions get an ApprovalInstance with no steps and state=submitted. "
-                    + "Role IDs and template IDs are read from qc.legacy-migration.* properties."
-    )
-    @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Migration completed; check totalFailed and failures for partial errors"),
-            @ApiResponse(responseCode = "500", description = "Unexpected error during migration")
-    })
-    public ResponseEntity<ResponseResult<LegacyMigrationResult>> migrateLegacyApproval() {
-        try {
-            LegacyMigrationResult result = legacyApprovalMigrationService.migrate();
-            return ResponseResult.of(result, ResponseStatus.SUCCESS);
-        } catch (Exception e) {
-            log.error("Legacy approval migration failed", e);
-            return ResponseResult.fail("Migration failed: " + e.getMessage(), ResponseStatus.INTERNAL_SERVER_ERROR, e);
-        }
-    }
-
-    @PostMapping("/approval-instance-snapshots")
-    @Operation(
-            summary = "Backfill approval instance filter snapshots",
-            description = "Refreshes filterSnapshot for all existing ApprovalInstance documents from their current form submission documents. "
-                    + "Use this after adding new snapshot display fields such as related entity names."
+            summary = "Backfill missing approval instances",
+            description = "Creates ApprovalInstance documents for existing form submissions that do not already "
+                    + "have one paired. Approval steps are sourced from the form template approvalTemplateId "
+                    + "using the normal approval-instance creation flow. Idempotent - already-paired submissions "
+                    + "are counted as skipped."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Backfill completed; check totalFailed and failures for partial errors"),
-            @ApiResponse(responseCode = "500", description = "Unexpected error during snapshot backfill")
+            @ApiResponse(responseCode = "500", description = "Unexpected error during approval-instance backfill")
     })
-    public ResponseEntity<ResponseResult<ApprovalInstanceSnapshotBackfillResult>> backfillApprovalInstanceSnapshots() {
+    public ResponseEntity<ResponseResult<LegacyMigrationResult>> backfillMissingApprovalInstances() {
         try {
-            ApprovalInstanceSnapshotBackfillResult result = approvalInstanceSnapshotBackfillService.backfillAll();
+            LegacyMigrationResult result = approvalInstanceBackfillService.backfillMissingApprovalInstances();
             return ResponseResult.of(result, ResponseStatus.SUCCESS);
         } catch (Exception e) {
-            log.error("Approval instance snapshot backfill failed", e);
-            return ResponseResult.fail("Snapshot backfill failed: " + e.getMessage(), ResponseStatus.INTERNAL_SERVER_ERROR, e);
+            log.error("Approval instance backfill failed", e);
+            return ResponseResult.fail("Approval instance backfill failed: " + e.getMessage(), ResponseStatus.INTERNAL_SERVER_ERROR, e);
         }
     }
 }

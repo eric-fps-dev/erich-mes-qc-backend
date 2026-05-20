@@ -11,7 +11,6 @@ import com.fps.svmes.services.AlertRecordService;
 import com.fps.svmes.repositories.jpaRepo.user.UserRepository;
 import com.fps.svmes.services.QcTaskSubmissionLogsService;
 import com.fps.svmes.services.QcSnapshotSubmissionService;
-import com.fps.svmes.services.FormSubmissionMutationGuard;
 import com.itextpdf.text.pdf.BaseFont;
 import com.itextpdf.text.pdf.PdfPCell;
 import com.itextpdf.text.pdf.PdfPTable;
@@ -68,9 +67,6 @@ public class QcTaskSubmissionLogsServiceImpl implements QcTaskSubmissionLogsServ
 
     @Autowired
     private QcSnapshotSubmissionService qcSnapshotSubmissionService;
-
-    @Autowired
-    private FormSubmissionMutationGuard formSubmissionMutationGuard;
 
     @Override
     public QcTaskSubmissionLogsDTO insertLog(QcTaskSubmissionLogsDTO dto) {
@@ -610,7 +606,6 @@ public class QcTaskSubmissionLogsServiceImpl implements QcTaskSubmissionLogsServ
     @Override
     @org.springframework.transaction.annotation.Transactional("transactionManager")
     public void deleteSubmissionLog(FormSubmissionActionRequest request) {
-        formSubmissionMutationGuard.validateDeleteMutation(request);
         String submissionId = request.getSubmissionId();
         String collectionName = request.getCollectionName();
         // 1. Check if collection exists

@@ -11,7 +11,7 @@ import java.util.Map;
 public interface ReportingService {
     List<WidgetDataDTO> extractWidgetData(String jsonInput);
 
-    List<WidgetDataDTO> extractWidgetDataWithCounts(Long formTemplateId, String startDateTime, String endDateTime, List<String> submissionStates);
+    List<WidgetDataDTO> extractWidgetDataWithCounts(Long formTemplateId, String startDateTime, String endDateTime);
 
     List<Document> fetchQcRecords(Long formTemplateId, String startDateTime, String endDateTime, Integer page, Integer size);
 
@@ -26,16 +26,14 @@ public interface ReportingService {
             Integer page,
             Integer size,
             String sort,
-            String search,
-            List<String> submissionStates
+            String search
     );
 
     List<Document> fetchAllRecordsWithoutPagination(Long formTemplateId,
                                                            String startDateTime,
                                                            String endDateTime,
                                                            String search,
-                                                           String sort,
-                                                           List<String> submissionStates);
+                                                           String sort);
 
     Map<String, Object> debugTemplateData(Long formTemplateId, String startDateTime, String endDateTime);
 
@@ -50,8 +48,7 @@ public interface ReportingService {
             Integer page,
             Integer size,
             String sort,
-            String search,
-            List<String> submissionStates
+            String search
     );
 }
 
