@@ -13,6 +13,7 @@ import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
+import org.springframework.lang.NonNull;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.client.RestTemplate;
 
@@ -254,7 +255,7 @@ class QcSummaryEmailExportServiceImplTest {
         }
 
         @Override
-        public void deleteSubmissionLog(FormSubmissionActionRequest request) {
+         public void deleteSubmissionLog(String submissionId, @NonNull  String collectionName) {
             throw new UnsupportedOperationException();
         }
 
