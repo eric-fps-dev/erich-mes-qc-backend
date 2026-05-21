@@ -1,7 +1,6 @@
 package com.fps.svmes.controllers;
 
 import com.fps.svmes.dto.dtos.qcForm.QcTaskSubmissionLogsDTO;
-import com.fps.svmes.dto.requests.FormSubmissionActionRequest;
 import com.fps.svmes.dto.responses.ResponseResult;
 import com.fps.svmes.services.QcTaskSubmissionLogsService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -143,16 +142,12 @@ public class QcTaskSubmissionLogsController {
     public ResponseEntity<?> deleteSubmissionLog(
             @PathVariable String submissionId,
             @RequestParam Long qcFormTemplateId,
-            @RequestParam String createdAt,
-            @RequestParam Long actorUserId) {
+            @RequestParam String createdAt
+           ) {
         try {
             // determine the form_template_{id}_{YYYYMM} collection to look for according to createdAt example createdAt string 2025-02-05 19:31:58
             String collectionName = "form_template_" + qcFormTemplateId + "_" + createdAt.substring(0, 7).replace("-", "");
-            FormSubmissionActionRequest request = new FormSubmissionActionRequest();
-            request.setSubmissionId(submissionId);
-            request.setCollectionName(collectionName);
-            request.setActorUserId(actorUserId);
-            qcTaskSubmissionLogsService.deleteSubmissionLog(request);
+            qcTaskSubmissionLogsService.deleteSubmissionLog(submissionId, collectionName);
             return ResponseEntity.ok("Submission log deleted successfully");
         } catch (IllegalStateException e) {
             return ResponseEntity.status(409).body("Error deleting submission log: " + e.getMessage());

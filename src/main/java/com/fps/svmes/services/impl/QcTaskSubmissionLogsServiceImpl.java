@@ -1,8 +1,6 @@
 package com.fps.svmes.services.impl;
 
 import com.fps.svmes.dto.dtos.qcForm.QcTaskSubmissionLogsDTO;
-import com.fps.svmes.dto.requests.FormSubmissionActionRequest;
-import com.fps.svmes.exceptions.ApprovalInstanceException;
 import com.fps.svmes.models.nosql.approval.ApprovalInstance;
 import com.fps.svmes.models.sql.qcForm.QcTaskSubmissionLogs;
 import com.fps.svmes.repositories.jpaRepo.qcForm.QcFormTemplateRepository;
@@ -15,7 +13,6 @@ import com.itextpdf.text.pdf.BaseFont;
 import com.itextpdf.text.pdf.PdfPCell;
 import com.itextpdf.text.pdf.PdfPTable;
 import com.itextpdf.text.pdf.PdfWriter;
-import com.mongodb.client.MongoCollection;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
@@ -30,6 +27,8 @@ import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.stereotype.Service;
 import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.lang.NonNull;
+
 import com.itextpdf.text.*;
 
 import java.io.InputStream;
@@ -605,9 +604,7 @@ public class QcTaskSubmissionLogsServiceImpl implements QcTaskSubmissionLogsServ
 
     @Override
     @org.springframework.transaction.annotation.Transactional("transactionManager")
-    public void deleteSubmissionLog(FormSubmissionActionRequest request) {
-        String submissionId = request.getSubmissionId();
-        String collectionName = request.getCollectionName();
+    public void deleteSubmissionLog(String submissionId, @NonNull String collectionName) {
         // 1. Check if collection exists
         if (!mongoTemplate.collectionExists(collectionName)) {
             throw new RuntimeException("Collection not found: " + collectionName);

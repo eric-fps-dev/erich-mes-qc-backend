@@ -102,27 +102,6 @@ public class QcFormDataController {
         }
     }
 
-    @DeleteMapping("/form-submission")
-    @Operation(
-            summary = "Delete form submission",
-            description = "Hard deletes a form submission and related approval-instance records."
-    )
-    @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Form submission deleted successfully"),
-            @ApiResponse(responseCode = "500", description = "Unexpected error deleting form submission")
-    })
-    public ResponseEntity<ResponseResult<String>> deleteFormSubmission(@Valid @RequestBody FormSubmissionActionRequest request) {
-        try {
-            qcTaskSubmissionLogsService.deleteSubmissionLog(request);
-            return ResponseResult.of("Form submission deleted successfully", ResponseStatus.SUCCESS);
-        } catch (IllegalStateException | ApprovalInstanceException e) {
-            return ResponseResult.fail(e.getMessage(), ResponseStatus.CONFLICT, e);
-        } catch (Exception e) {
-            log.error("Error deleting form submission", e);
-            return ResponseResult.fail("Error deleting form submission: " + e.getMessage(), ResponseStatus.INTERNAL_SERVER_ERROR, e);
-        }
-    }
-
     @GetMapping("/version-history")
     @Operation(
             summary = "Get form submission version history",
