@@ -1,6 +1,7 @@
 package com.fps.svmes.services;
 
 import com.fps.svmes.dto.PagedResultDTO;
+import com.fps.svmes.dto.dtos.reporting.QcRecordApprovalRequirementDTO;
 import com.fps.svmes.dto.dtos.reporting.WidgetDataDTO;
 import org.bson.Document;
 
@@ -50,5 +51,7 @@ public interface ReportingService {
             String sort,
             String search
     );
+
+    Map<String, QcRecordApprovalRequirementDTO> fetchQcRecordApprovalRequirements(List<String> recordIds);
 }
 

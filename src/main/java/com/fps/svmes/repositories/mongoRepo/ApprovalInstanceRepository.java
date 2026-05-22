@@ -17,6 +17,8 @@ public interface ApprovalInstanceRepository extends MongoRepository<ApprovalInst
 
     Optional<ApprovalInstance> findByFormSubmissionId(String formSubmissionId);
 
+    List<ApprovalInstance> findByFormSubmissionIdIn(Collection<String> formSubmissionIds);
+
     List<ApprovalInstance> findByFormSubmissionCollectionNameAndFormSubmissionIdIn(
             String formSubmissionCollectionName,
             Collection<String> formSubmissionIds

@@ -4,10 +4,15 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fps.svmes.dto.PagedResultDTO;
 import com.fps.svmes.dto.dtos.reporting.OptionItemDTO;
+import com.fps.svmes.dto.dtos.reporting.QcRecordApprovalRequirementDTO;
 import com.fps.svmes.dto.dtos.reporting.TimeBucketedOptionDTO;
 import com.fps.svmes.dto.dtos.reporting.WidgetDataDTO;
+import com.fps.svmes.enums.approval.ApprovalStepState;
+import com.fps.svmes.models.nosql.approval.ApprovalInstance;
+import com.fps.svmes.models.nosql.approval.ApprovalInstanceStep;
 import com.fps.svmes.repositories.jpaRepo.qcForm.QcFormTemplateRepository;
 import com.fps.svmes.repositories.jpaRepo.user.UserRepository;
+import com.fps.svmes.repositories.mongoRepo.ApprovalInstanceRepository;
 import com.fps.svmes.services.ReportingService;
 import com.fps.shared.entity.primary.user.User;
 import com.mongodb.client.MongoClient;
@@ -54,6 +59,9 @@ public class ReportingServiceImpl implements ReportingService {
 
     @Autowired
     UserRepository userRepository;
+
+    @Autowired
+    ApprovalInstanceRepository approvalInstanceRepository;
 
     @Value("${spring.data.mongodb.database}")
     private String mongoDatabaseName;
@@ -1095,6 +1103,18 @@ public class ReportingServiceImpl implements ReportingService {
         return false;
     }
 
+    private boolean isActiveApprovalRequirementStep(ApprovalInstanceStep step) {
+        if (step == null || step.getStepState() == null) {
+            return false;
+        }
+        return step.getStepState() == ApprovalStepState.PENDING
+                || step.getStepState() == ApprovalStepState.IN_PROGRESS;
+    }
+
+    private QcRecordApprovalRequirementDTO emptyApprovalRequirement() {
+        return new QcRecordApprovalRequirementDTO(List.of(), List.of());
+    }
+
     // TODO: use MongoFormTemplateUtils
     private HashMap<String, Object> QcFormTemplateOptionItemsKeyValueMapping(Long formId) {
         String formTemplateJson = qcFormTemplateRepository.findFormTemplateJsonById(formId);
@@ -1637,6 +1657,58 @@ public class ReportingServiceImpl implements ReportingService {
                 page,
                 size
         );
+    }
+
+    @Override
+    public Map<String, QcRecordApprovalRequirementDTO> fetchQcRecordApprovalRequirements(List<String> recordIds) {
+        if (recordIds == null || recordIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        LinkedHashMap<String, QcRecordApprovalRequirementDTO> requirementsByRecordId = new LinkedHashMap<>();
+        List<String> normalizedRecordIds = recordIds.stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(id -> !id.isEmpty())
+                .toList();
+
+        for (String recordId : normalizedRecordIds) {
+            requirementsByRecordId.put(recordId, emptyApprovalRequirement());
+        }
+        if (requirementsByRecordId.isEmpty()) {
+            return requirementsByRecordId;
+        }
+
+        List<ApprovalInstance> instances = approvalInstanceRepository.findByFormSubmissionIdIn(requirementsByRecordId.keySet());
+        for (ApprovalInstance instance : instances) {
+            String recordId = instance.getFormSubmissionId();
+            if (recordId == null || !requirementsByRecordId.containsKey(recordId)) {
+                continue;
+            }
+
+            LinkedHashSet<String> userIds = new LinkedHashSet<>();
+            LinkedHashSet<String> roleIds = new LinkedHashSet<>();
+            if (instance.getApprovalSteps() != null) {
+                for (ApprovalInstanceStep step : instance.getApprovalSteps()) {
+                    if (!isActiveApprovalRequirementStep(step)) {
+                        continue;
+                    }
+                    if (step.getRequiredUserId() != null && !step.getRequiredUserId().isBlank()) {
+                        userIds.add(step.getRequiredUserId());
+                    }
+                    if (step.getRequiredRoleId() != null && !step.getRequiredRoleId().isBlank()) {
+                        roleIds.add(step.getRequiredRoleId());
+                    }
+                }
+            }
+
+            requirementsByRecordId.put(recordId, new QcRecordApprovalRequirementDTO(
+                    new ArrayList<>(userIds),
+                    new ArrayList<>(roleIds)
+            ));
+        }
+
+        return requirementsByRecordId;
     }
 
 }
