@@ -71,9 +71,11 @@ public class ApprovalInstanceServiceImpl implements ApprovalInstanceService {
         if (hasTemplate) {
             ApprovalTemplate template = findApprovalTemplateById(approvalTemplateId);
             instance.setApprovalTemplateId(template.getId());
+            instance.setApprovalTemplateName(template.getName());
             instance.setApprovalSteps(copyTemplateSteps(template.getApprovalSteps()));
         } else {
             instance.setApprovalTemplateId(null);
+            instance.setApprovalTemplateName(null);
             instance.setApprovalSteps(new ArrayList<>());
         }
 

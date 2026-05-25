@@ -457,6 +457,7 @@ public class QcFormDataServiceImpl implements QcFormDataService {
                 .include("formSubmissionId")
                 .include("formSubmissionCollectionName")
                 .include("approvalTemplateId")
+                .include("approvalTemplateName")
                 .include("currentStepSequence")
                 .include("approvalProcessStatus")
                 .include("approvalSteps.sequence")
@@ -482,6 +483,7 @@ public class QcFormDataServiceImpl implements QcFormDataService {
         dto.setFormSubmissionState(snapshot == null ? null : snapshot.getFormSubmissionState());
         dto.setApprovalInstanceId(instance.getId());
         dto.setApprovalTemplateId(instance.getApprovalTemplateId());
+        dto.setApprovalTemplateName(instance.getApprovalTemplateName());
         dto.setCurrentStepSequence(instance.getCurrentStepSequence());
         dto.setApprovalSteps(toApprovalInstanceListSteps(instance));
         dto.setApprovalProcessStatus(resolveApprovalProcessStatus(instance));
@@ -512,6 +514,7 @@ public class QcFormDataServiceImpl implements QcFormDataService {
         ApprovalInstanceDTO dto = new ApprovalInstanceDTO();
         dto.setApprovalInstanceId(instance.getId());
         dto.setApprovalTemplateId(instance.getApprovalTemplateId());
+        dto.setApprovalTemplateName(instance.getApprovalTemplateName());
         dto.setCurrentStepSequence(instance.getCurrentStepSequence());
         dto.setApprovalSteps(toApprovalInstanceListSteps(instance));
         dto.setApprovalProcessStatus(resolveApprovalProcessStatus(instance));

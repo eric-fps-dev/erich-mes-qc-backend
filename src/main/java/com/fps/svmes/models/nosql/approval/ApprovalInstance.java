@@ -25,6 +25,9 @@ public class ApprovalInstance extends BaseInstant {
     @Field("approvalTemplateId")
     private String approvalTemplateId;
 
+    @Field("approvalTemplateName")
+    private String approvalTemplateName;
+
     @Field("formTemplateId")
     private String formTemplateId;
 

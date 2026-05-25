@@ -12,6 +12,7 @@ public class ApprovalInstanceListItemDTO {
     // Approval instance related fields
     private String approvalInstanceId;
     private String approvalTemplateId;
+    private String approvalTemplateName;
     private Integer currentStepSequence;
     private List<ApprovalInstanceListStepDTO> approvalSteps;
     private String approvalProcessStatus;
