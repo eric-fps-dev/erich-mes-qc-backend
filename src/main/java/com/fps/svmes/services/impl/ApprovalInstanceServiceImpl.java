@@ -177,7 +177,7 @@ public class ApprovalInstanceServiceImpl implements ApprovalInstanceService {
             if (formState == FormSubmissionState.UNDER_REVIEW) {
                 activateCurrentStep(instance);
             } else if (formState == FormSubmissionState.PENDING_REVISION) {
-                markAwaitingRevision(instance.getApprovalSteps().get(0));
+                markRequestedCorrection(instance.getApprovalSteps().get(0));
             }
         } else {
             instance.setApprovalSteps(mergeUnchangedStepProgress(oldSteps, newSteps));
@@ -287,9 +287,9 @@ public class ApprovalInstanceServiceImpl implements ApprovalInstanceService {
             ApprovalInstanceStep current = currentStep(instance);
             if (Boolean.TRUE.equals(request.getResetApprovalSteps())) {
                 resetAllSteps(instance);
-                markAwaitingRevision(currentStep(instance));
+                markRequestedCorrection(currentStep(instance));
             } else {
-                markAwaitingRevision(current);
+                markRequestedCorrection(current);
             }
             saveWithAudit(instance, updatedBy);
         }
@@ -722,9 +722,9 @@ public class ApprovalInstanceServiceImpl implements ApprovalInstanceService {
         currentStep(instance).setStepState(ApprovalStepState.IN_PROGRESS);
     }
 
-    private void markAwaitingRevision(ApprovalInstanceStep step) {
+    private void markRequestedCorrection(ApprovalInstanceStep step) {
         step.setLastActionRecord(null);
-        step.setStepState(ApprovalStepState.AWAITING_REVISION);
+        step.setStepState(ApprovalStepState.REQUESTED_CORRECTION);
     }
 
     private void applyStepDecision(ApprovalInstanceStep step, ApprovalStepState stepState, ApprovalActionLog logEntry) {

@@ -218,4 +218,166 @@ public class MongoFormTemplateUtils {
 
         return formatted;
     }
+
+    public Object formatSubmissionSnapshotForResponse(Object snapshot, Long formId) {
+        if (formId == null) {
+            return snapshot;
+        }
+
+        Document document = toDocument(snapshot);
+        if (document == null) {
+            return snapshot;
+        }
+        return formatRecordWithDividers(document, formId);
+    }
+
+    public Document formatRecordWithDividers(Document document, Long formId) {
+        HashMap<String, String> keyValueMap = getFormTemplateKeyValueMapping(formId);
+        HashMap<String, Object> optionItemsKeyValueMap = getOptionItemsKeyValueMapping(formId);
+        HashMap<String, String> fieldToDividerMap = new HashMap<>();
+        List<Document> widgetList = getWidgetListFromTemplate(formId);
+        // Build the same field -> divider ownership map used by QC task submission log formatting.
+        populateFieldToDividerMap(widgetList, "uncategorized", fieldToDividerMap);
+
+        Document formattedDocument = new Document();
+        Document groupedData = new Document();
+
+        for (String key : document.keySet()) {
+            Object value = document.get(key);
+            String formattedKey = keyValueMap.getOrDefault(key, key);
+            String dividerLabel = fieldToDividerMap.getOrDefault(key, "uncategorized");
+
+            if ("_id".equals(key) && value instanceof ObjectId) {
+                formattedDocument.put("_id", value.toString());
+                continue;
+            }
+
+            if (optionItemsKeyValueMap.containsKey(key) && value instanceof List<?> valueList) {
+                HashMap<String, String> valueToLabelMap = (HashMap<String, String>) optionItemsKeyValueMap.get(key);
+                value = valueList.stream()
+                        .map(val -> val != null ? valueToLabelMap.getOrDefault(val.toString(), val.toString()) : null)
+                        .collect(Collectors.toList());
+            } else if (optionItemsKeyValueMap.containsKey(key) && value != null) {
+                HashMap<String, String> valueToLabelMap = (HashMap<String, String>) optionItemsKeyValueMap.get(key);
+                value = valueToLabelMap.getOrDefault(value.toString(), value.toString());
+            }
+
+            if (List.of("_id", "created_at", "created_by").contains(key)) {
+                formattedDocument.put(formattedKey, value);
+            } else {
+                groupedData.computeIfAbsent(dividerLabel, ignored -> new Document());
+                ((Document) groupedData.get(dividerLabel)).put(formattedKey, value);
+            }
+
+            if ("created_by".equals(key) && value instanceof Long longValue) {
+                try {
+                    String creatorName = userRepository.findNameById(Math.toIntExact(longValue));
+                    formattedDocument.put("提交人", creatorName != null ? creatorName : "未知用户");
+                } catch (Exception e) {
+                    formattedDocument.put("提交人", "未知用户");
+                }
+            }
+        }
+
+        if (document.containsKey("exceeded_info")) {
+            Document original = (Document) document.get("exceeded_info");
+            Document labeled = new Document();
+            for (String raw : original.keySet()) {
+                String labeledKey = keyValueMap.getOrDefault(raw, raw);
+                labeled.put(labeledKey, original.get(raw));
+            }
+            formattedDocument.put("exceeded_info", labeled);
+        }
+
+        formattedDocument.putAll(groupedData);
+        return formattedDocument;
+    }
+
+    private void populateFieldToDividerMap(List<Document> widgetList,
+                                           String currentDivider,
+                                           HashMap<String, String> fieldToDividerMap) {
+        if (widgetList == null) {
+            return;
+        }
+
+        String activeDivider = currentDivider;
+        for (Document widget : widgetList) {
+            String type = widget.getString("type");
+            Document options = (Document) widget.get("options");
+
+            if ("divider".equals(type) && options != null) {
+                activeDivider = options.getString("label");
+                continue;
+            }
+
+            if (options != null && options.containsKey("name")) {
+                fieldToDividerMap.put(options.getString("name"), activeDivider);
+            }
+
+            List<Document> nestedWidgetList = (List<Document>) widget.get("widgetList");
+            if (nestedWidgetList != null) {
+                // Nested widget containers inherit the nearest divider label.
+                populateFieldToDividerMap(nestedWidgetList, activeDivider, fieldToDividerMap);
+            }
+
+            List<Document> cols = (List<Document>) widget.get("cols");
+            if (cols != null) {
+                for (Document col : cols) {
+                    List<Document> colWidgetList = (List<Document>) col.get("widgetList");
+                    if (colWidgetList != null) {
+                        // Grid column fields also belong to the current divider section.
+                        populateFieldToDividerMap(colWidgetList, activeDivider, fieldToDividerMap);
+                    }
+                }
+            }
+        }
+    }
+
+    private List<Document> getWidgetListFromTemplate(Long formId) {
+        String formTemplateJson = qcFormTemplateRepository.findFormTemplateJsonById(formId);
+        if (formTemplateJson == null || formTemplateJson.isEmpty()) {
+            throw new RuntimeException("Form template JSON not found for formId: " + formId);
+        }
+        Document formTemplate = Document.parse(formTemplateJson);
+        return (List<Document>) formTemplate.get("widgetList");
+    }
+
+    private Document toDocument(Object value) {
+        if (value instanceof Document document) {
+            return copyDocument(document);
+        }
+        if (value instanceof Map<?, ?> map) {
+            Document document = new Document();
+            for (Map.Entry<?, ?> entry : map.entrySet()) {
+                if (entry.getKey() != null) {
+                    document.put(entry.getKey().toString(), normalizeValue(entry.getValue()));
+                }
+            }
+            return document;
+        }
+        return null;
+    }
+
+    private Document copyDocument(Document source) {
+        Document copy = new Document();
+        for (Map.Entry<String, Object> entry : source.entrySet()) {
+            copy.put(entry.getKey(), normalizeValue(entry.getValue()));
+        }
+        return copy;
+    }
+
+    private Object normalizeValue(Object value) {
+        if (value instanceof Document document) {
+            return copyDocument(document);
+        }
+        if (value instanceof Map<?, ?> map) {
+            return toDocument(map);
+        }
+        if (value instanceof List<?> list) {
+            return list.stream()
+                    .map(this::normalizeValue)
+                    .toList();
+        }
+        return value;
+    }
 }
