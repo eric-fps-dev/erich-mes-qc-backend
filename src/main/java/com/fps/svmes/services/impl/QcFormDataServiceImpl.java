@@ -2,6 +2,7 @@ package com.fps.svmes.services.impl;
 
 import com.fps.svmes.dto.PagedResultDTO;
 import com.fps.svmes.dto.dtos.alert.ExceededFieldInfoDTO;
+import com.fps.svmes.models.nosql.approval.ApprovalActionLog;
 import com.fps.svmes.dto.dtos.approval.ApprovalInstanceDTO;
 import com.fps.svmes.dto.dtos.approval.ApprovalInstanceListItemDTO;
 import com.fps.svmes.dto.dtos.approval.ApprovalInstanceListStepDTO;
@@ -518,7 +519,7 @@ public class QcFormDataServiceImpl implements QcFormDataService {
         dto.setCurrentStepSequence(instance.getCurrentStepSequence());
         dto.setApprovalSteps(toApprovalInstanceListSteps(instance));
         dto.setApprovalProcessStatus(resolveApprovalProcessStatus(instance));
-        dto.setActionLog(instance.getActionLog() == null ? List.of() : instance.getActionLog());
+        dto.setActionLog(formatApprovalActionLogs(instance.getActionLog(), formTemplateId));
         dto.setCreatedAt(snapshot == null ? null : snapshot.getCreatedAt());
         dto.setUpdatedAt(instance.getUpdatedAt());
         dto.setCreatedBy(snapshot == null ? null : snapshot.getCreatedBy());
@@ -751,6 +752,107 @@ public class QcFormDataServiceImpl implements QcFormDataService {
         dto.setApprovalProcessStatus(deriveApprovalProcessStatus(approvalSteps));
         dto.setFormData(new HashMap<>(submission));
         return dto;
+    }
+
+    private List<ApprovalActionLog> formatApprovalActionLogs(List<ApprovalActionLog> actionLogs, Long formTemplateId) {
+        if (actionLogs == null || actionLogs.isEmpty()) {
+            return List.of();
+        }
+
+        HashMap<String, Object> optionItems = null;
+        HashMap<String, String> templateMapping = null;
+        if (formTemplateId != null) {
+            optionItems = mongoUtils.getOptionItemsKeyValueMapping(formTemplateId);
+            templateMapping = mongoUtils.getFormTemplateKeyValueMapping(formTemplateId);
+        }
+
+        HashMap<String, Object> resolvedOptionItems = optionItems;
+        HashMap<String, String> resolvedTemplateMapping = templateMapping;
+        return actionLogs.stream()
+                .map(log -> copyApprovalActionLog(log, resolvedOptionItems, resolvedTemplateMapping))
+                .toList();
+    }
+
+    private ApprovalActionLog copyApprovalActionLog(ApprovalActionLog source,
+                                                    HashMap<String, Object> optionItems,
+                                                    HashMap<String, String> templateMapping) {
+        ApprovalActionLog copy = new ApprovalActionLog();
+        copy.setLogId(source.getLogId());
+        copy.setAction(source.getAction());
+        copy.setStepSequence(source.getStepSequence());
+        copy.setComments(source.getComments());
+        copy.setESignature(source.getESignature());
+        copy.setSuggestRetest(source.getSuggestRetest());
+        copy.setActorUserId(source.getActorUserId());
+        copy.setActorUserName(source.getActorUserName());
+        copy.setActorRoleId(source.getActorRoleId());
+        copy.setActorRoleName(source.getActorRoleName());
+        copy.setFormSubmissionSnapshot(formatActionLogSubmissionSnapshot(
+                source.getFormSubmissionSnapshot(),
+                optionItems,
+                templateMapping
+        ));
+        copy.setFormTemplateSnapshot(source.getFormTemplateSnapshot());
+        copy.setActedAt(source.getActedAt());
+        return copy;
+    }
+
+    private Object formatActionLogSubmissionSnapshot(Object snapshot,
+                                                     HashMap<String, Object> optionItems,
+                                                     HashMap<String, String> templateMapping) {
+        if (optionItems == null || templateMapping == null) {
+            return snapshot;
+        }
+        Document document = toDocumentSnapshot(snapshot);
+        if (document == null) {
+            return snapshot;
+        }
+        return mongoUtils.formatRecord(document, optionItems, templateMapping);
+    }
+
+    private Document toDocumentSnapshot(Object snapshot) {
+        if (snapshot instanceof Document document) {
+            return copyDocument(document);
+        }
+        if (snapshot instanceof Map<?, ?> map) {
+            Document document = new Document();
+            for (Map.Entry<?, ?> entry : map.entrySet()) {
+                if (entry.getKey() != null) {
+                    document.put(entry.getKey().toString(), normalizeSnapshotValue(entry.getValue()));
+                }
+            }
+            return document;
+        }
+        return null;
+    }
+
+    private Document copyDocument(Document source) {
+        Document copy = new Document();
+        for (Map.Entry<String, Object> entry : source.entrySet()) {
+            copy.put(entry.getKey(), normalizeSnapshotValue(entry.getValue()));
+        }
+        return copy;
+    }
+
+    private Object normalizeSnapshotValue(Object value) {
+        if (value instanceof Document document) {
+            return copyDocument(document);
+        }
+        if (value instanceof Map<?, ?> map) {
+            Document document = new Document();
+            for (Map.Entry<?, ?> entry : map.entrySet()) {
+                if (entry.getKey() != null) {
+                    document.put(entry.getKey().toString(), normalizeSnapshotValue(entry.getValue()));
+                }
+            }
+            return document;
+        }
+        if (value instanceof List<?> list) {
+            return list.stream()
+                    .map(this::normalizeSnapshotValue)
+                    .toList();
+        }
+        return value;
     }
 
     private String formTemplateName(Long formTemplateId) {
