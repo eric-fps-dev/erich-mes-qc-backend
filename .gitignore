@@ -33,3 +33,5 @@ build/
 .vscode/
 
 .env
+dev-tunnel-key.pem
+*.sh

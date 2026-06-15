@@ -59,6 +59,9 @@ logging:
     org.springframework: INFO
 
 management:
+  health:
+    mail:
+      enabled: false
   endpoints:
     web:
       exposure:
