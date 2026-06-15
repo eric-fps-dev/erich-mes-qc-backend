@@ -35,3 +35,4 @@ build/
 .env
 dev-tunnel-key.pem
 *.sh
+tests/
