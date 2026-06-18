@@ -2,6 +2,7 @@ package com.fps.svmes.services;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fps.svmes.dto.dtos.qcForm.QcTaskSubmissionLogsDTO;
+import com.fps.svmes.dto.requests.FormSubmissionActionRequest;
 import com.fps.svmes.dto.requests.QcSummaryEmailExportRequest;
 import com.fps.svmes.dto.responses.QcSummaryEmailExportResponse;
 import com.fps.svmes.services.impl.QcSummaryEmailExportServiceImpl;
@@ -12,6 +13,7 @@ import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
+import org.springframework.lang.NonNull;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.client.RestTemplate;
 
@@ -253,7 +255,7 @@ class QcSummaryEmailExportServiceImplTest {
         }
 
         @Override
-        public void deleteSubmissionLog(String submissionId, String collectionName) {
+         public void deleteSubmissionLog(String submissionId, @NonNull  String collectionName) {
             throw new UnsupportedOperationException();
         }
 

@@ -1,8 +1,11 @@
 package com.fps.svmes.services;
 
 import com.fps.svmes.dto.dtos.qcForm.QcTaskSubmissionLogsDTO;
+import com.fps.svmes.dto.requests.FormSubmissionActionRequest;
 
 import org.bson.Document;
+import org.springframework.lang.NonNull;
+
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -21,10 +24,9 @@ public interface QcTaskSubmissionLogsService {
 
     byte[] exportDocumentToPdf(Document document);
 
-    void deleteSubmissionLog(String submissionId, String collectionName);
+    void deleteSubmissionLog(String submissionId, @NonNull String collectionName);
 
     Document getRawDocumentBySubmissionId(String submissionId, String collectionName);
 
     List<Map<String, Object>> getFormTemplateFieldList(Long formId);
-
 }

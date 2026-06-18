@@ -1,22 +1,18 @@
 package com.fps.svmes.services.impl;
 
 import com.fps.svmes.dto.dtos.qcForm.QcTaskSubmissionLogsDTO;
+import com.fps.svmes.models.nosql.approval.ApprovalInstance;
 import com.fps.svmes.models.sql.qcForm.QcTaskSubmissionLogs;
 import com.fps.svmes.repositories.jpaRepo.qcForm.QcFormTemplateRepository;
 import com.fps.svmes.repositories.jpaRepo.qcForm.QcTaskSubmissionLogsRepository;
-import com.fps.svmes.repositories.jpaRepo.qcForm.QcApprovalAssignmentRepository;
 import com.fps.svmes.services.AlertRecordService;
 import com.fps.svmes.repositories.jpaRepo.user.UserRepository;
 import com.fps.svmes.services.QcTaskSubmissionLogsService;
 import com.fps.svmes.services.QcSnapshotSubmissionService;
-import com.itextpdf.text.Paragraph;
-
 import com.itextpdf.text.pdf.BaseFont;
 import com.itextpdf.text.pdf.PdfPCell;
 import com.itextpdf.text.pdf.PdfPTable;
 import com.itextpdf.text.pdf.PdfWriter;
-import com.mongodb.client.MongoCollection;
-import jakarta.validation.constraints.Null;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
@@ -31,14 +27,13 @@ import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.stereotype.Service;
 import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.lang.NonNull;
+
 import com.itextpdf.text.*;
 
 import java.io.InputStream;
 import java.time.*;
-import java.time.ZoneId;
-import java.time.ZoneOffset;
 import java.util.*;
-import java.util.Collections;
 
 import org.bson.Document;
 
@@ -71,9 +66,6 @@ public class QcTaskSubmissionLogsServiceImpl implements QcTaskSubmissionLogsServ
 
     @Autowired
     private QcSnapshotSubmissionService qcSnapshotSubmissionService;
-
-    @Autowired
-    private QcApprovalAssignmentRepository qcApprovalAssignmentRepository;
 
     @Override
     public QcTaskSubmissionLogsDTO insertLog(QcTaskSubmissionLogsDTO dto) {
@@ -612,7 +604,7 @@ public class QcTaskSubmissionLogsServiceImpl implements QcTaskSubmissionLogsServ
 
     @Override
     @org.springframework.transaction.annotation.Transactional("transactionManager")
-    public void deleteSubmissionLog(String submissionId, String collectionName) {
+    public void deleteSubmissionLog(String submissionId, @NonNull String collectionName) {
         // 1. Check if collection exists
         if (!mongoTemplate.collectionExists(collectionName)) {
             throw new RuntimeException("Collection not found: " + collectionName);
@@ -647,10 +639,10 @@ public class QcTaskSubmissionLogsServiceImpl implements QcTaskSubmissionLogsServ
             // Delete associated alert records
             alertRecordService.deleteBySubmissionIds(idsToDelete);
 
-            // Delete associated approval assignments
-            for (String id : idsToDelete) {
-                qcApprovalAssignmentRepository.deleteBySubmissionId(id);
-            }
+            // Delete corresponding approval instances
+            Query deleteApprovalInstancesQuery = new Query(Criteria.where("formSubmissionCollectionName").is(collectionName)
+                    .and("formSubmissionId").in(idsToDelete));
+            mongoTemplate.remove(deleteApprovalInstancesQuery, ApprovalInstance.class);
 
             // Delete all documents with the same version_group_id
             Query deleteGroupQuery = new Query(Criteria.where("version_group_id").is(versionGroupId));
@@ -662,8 +654,10 @@ public class QcTaskSubmissionLogsServiceImpl implements QcTaskSubmissionLogsServ
             // Delete associated alert records
             alertRecordService.deleteBySubmissionIds(Collections.singletonList(submissionId));
 
-            // Delete associated approval assignments
-            qcApprovalAssignmentRepository.deleteBySubmissionId(submissionId);
+            // Delete corresponding approval instances
+            Query deleteApprovalInstanceQuery = new Query(Criteria.where("formSubmissionCollectionName").is(collectionName)
+                    .and("formSubmissionId").is(submissionId));
+            mongoTemplate.remove(deleteApprovalInstanceQuery, ApprovalInstance.class);
 
             // Delete only this document
             mongoTemplate.remove(idQuery, collectionName);
@@ -691,7 +685,9 @@ public class QcTaskSubmissionLogsServiceImpl implements QcTaskSubmissionLogsServ
         Document cleanedDocument = new Document();
         for (Map.Entry<String, Object> entry : rawDocument.entrySet()) {
             String key = entry.getKey();
-            if (key.equals("exceeded_info") || key.equals("e-signature") || key.equals("approval_info") || key.equals("_id") || key.equals("created_at") || key.equals("created_by")) {
+            if (key.equals("exceeded_info") || key.equals("e-signature") || key.equals("approval_info")
+                    || key.equals("_id") || key.equals("created_at") || key.equals("created_by")
+                    || key.equals("state") || key.equals("updated_at")) {
                 continue; // 跳过
             }
             cleanedDocument.put(key, entry.getValue());

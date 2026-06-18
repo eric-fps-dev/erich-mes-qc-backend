@@ -1,6 +1,8 @@
 package com.fps.svmes.controllers;
 
 import com.fps.svmes.dto.PagedResultDTO;
+import com.fps.svmes.dto.dtos.reporting.QcRecordApprovalRequirementDTO;
+import com.fps.svmes.dto.requests.QcRecordApprovalRequirementsRequest;
 import com.fps.svmes.dto.dtos.reporting.WidgetDataDTO;
 import com.fps.svmes.services.ReportingService;
 import org.bson.Document;
@@ -58,6 +60,13 @@ public class ReportingController {
                 sort,
                 search
         );
+    }
+
+    @PostMapping("/qc-records/approval-requirements")
+    public Map<String, QcRecordApprovalRequirementDTO> getQcRecordApprovalRequirements(
+            @RequestBody QcRecordApprovalRequirementsRequest request
+    ) {
+        return reportingService.fetchQcRecordApprovalRequirements(request == null ? null : request.getRecordIds());
     }
 
     @GetMapping("/qc-records/export")

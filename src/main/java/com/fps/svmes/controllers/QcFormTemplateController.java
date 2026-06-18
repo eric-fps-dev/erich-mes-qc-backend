@@ -108,8 +108,7 @@ public class QcFormTemplateController {
     }
 
     @PostMapping("/create-with-nodes")
-    @Operation(summary = "Create a QC form template with nodes and collections",
-            description = "Creates a QC form template, adds nodes under multiple selected folders, and initializes MongoDB collections.")
+    @Operation(summary = "Create a QC form template with nodes and collections",description = "Creates a QC form template, adds nodes under multiple selected folders, and initializes MongoDB collections.")
     public ResponseResult<Map<String, Object>> createTemplateWithNodes(@RequestBody TemplateFormRequest request) {
         try {
             // Step 1: Create Template
@@ -159,7 +158,7 @@ public class QcFormTemplateController {
     }
 
     @PutMapping("/{id}/full-update")
-    @Operation(summary = "Full update with node sync and audit log",
+    @Operation(summary = "Full update with node sync and audit log", 
             description = "Updates a QC form template, syncs FormNode labels, and writes an audit log entry.")
     public ResponseEntity<?> fullUpdateTemplate(
             @PathVariable Long id,

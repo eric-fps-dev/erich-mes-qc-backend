@@ -135,22 +135,27 @@ public class QcTaskSubmissionLogsController {
         }
     }
 
+
     // Delete the submission log by submissionId and createdAt
     @DeleteMapping("/{submissionId}")
     @Operation(summary = "Delete a submission log by submissionId and createdAt")
     public ResponseEntity<?> deleteSubmissionLog(
             @PathVariable String submissionId,
             @RequestParam Long qcFormTemplateId,
-            @RequestParam String createdAt) {
+            @RequestParam String createdAt
+           ) {
         try {
             // determine the form_template_{id}_{YYYYMM} collection to look for according to createdAt example createdAt string 2025-02-05 19:31:58
             String collectionName = "form_template_" + qcFormTemplateId + "_" + createdAt.substring(0, 7).replace("-", "");
             qcTaskSubmissionLogsService.deleteSubmissionLog(submissionId, collectionName);
             return ResponseEntity.ok("Submission log deleted successfully");
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(409).body("Error deleting submission log: " + e.getMessage());
         } catch (Exception e) {
             return ResponseEntity.status(500).body("Error deleting submission log: " + e.getMessage());
         }
     }
+
 
     @GetMapping("/raw_document")
     @Operation(summary = "Get raw MongoDB document by submissionId and createdAt (raw, unformatted)")
