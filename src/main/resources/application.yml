@@ -25,18 +25,21 @@ spring:
       connection-timeout: 45000 # 45 seconds - Time to wait for a new connection before timing out
 
   mail:
-    host: smtp.gmail.com
-    port: 587
-    username: ${MAIL_USERNAME:erikyu.98414@gmail.com}
-    password: ${MAIL_PASSWORD:zaha mkbx kjmk gbal}
+    host: ${SMTP_HOST}
+    port: ${SMTP_PORT}
+    username: ${SMTP_USERNAME}
+    password: ${SMTP_PASSWORD}
+    protocol: smtp
+    default-encoding: UTF-8
     properties:
       mail:
-        debug: false
         smtp:
           auth: true
           starttls:
             enable: true
             required: true
+          localhost: ${EMAIL_REDIRECT_HOST}
+          sendpartial: true
 
 server:
   port: 8090
@@ -59,6 +62,9 @@ logging:
     org.springframework: INFO
 
 management:
+  health:
+    mail:
+      enabled: false
   endpoints:
     web:
       exposure:

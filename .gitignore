@@ -31,5 +31,8 @@ build/
 
 ### VS Code ###
 .vscode/
-
+tests/
 .env
+dev-tunnel-key.pem
+*.sh
+tests/
