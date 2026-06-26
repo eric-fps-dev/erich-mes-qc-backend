@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Maven settings for Docker multi-stage build.
+
+  The default Maven 3.8.1+ settings.xml blocks all HTTP repositories via a
+  mirror called "maven-default-http-blocker". This project depends on a
+  private Nexus repository served over HTTP, so we override the default
+  settings to allow it.
+
+  This file is ONLY used inside the Docker builder stage.
+  It does NOT affect local development or CI runner builds.
+-->
+<settings xmlns="http://maven.apache.org/SETTINGS/1.2.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.2.0
+                              https://maven.apache.org/xsd/settings-1.2.0.xsd">
+
+    <!-- Override the default HTTP blocker to allow the private Nexus repo -->
+    <mirrors>
+        <mirror>
+            <id>maven-default-http-blocker</id>
+            <mirrorOf>!nexus</mirrorOf>
+            <name>Allow HTTP for the private Nexus repository</name>
+            <url>https://repo.maven.apache.org/maven2</url>
+        </mirror>
+    </mirrors>
+
+</settings>
