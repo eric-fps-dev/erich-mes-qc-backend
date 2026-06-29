@@ -1,0 +1,113 @@
+# ==============================================================================
+# Java CI/CD Pipeline — qc-service
+# Architecture: GitHub Actions (CI) -> Local Jenkins (CD / Docker Build)
+#
+# NOTE: Test stage is intentionally skipped — tests need refactoring.
+#       Once tests are ready, add `mvn clean verify` step before Jenkins trigger.
+#
+# Trigger Matrix:
+#   - Push to dev/staging/demo/prod branches -> Compile, Trigger Jenkins
+#   - Push tag v*.*.*                        -> Compile, Trigger Jenkins (staging or prod)
+#   - Pull Request to dev/staging/demo/prod  -> Compile only (no Jenkins trigger)
+# ==============================================================================
+
+name: QC Service CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "dev", "staging", "demo", "prod" ]
+    tags: [ 'v*.*.*' ]
+  pull_request:
+    branches: [ "dev", "staging", "demo", "prod" ]
+
+jobs:
+  # ============================================================================
+  # Job 1: Router
+  # Determines TARGET_ENV, TARGET_VER, and IS_PR from the Git trigger.
+  # ============================================================================
+  router:
+    runs-on: ubuntu-latest
+    outputs:
+      TARGET_ENV: ${{ steps.set-env.outputs.TARGET_ENV }}
+      TARGET_VER: ${{ steps.set-env.outputs.TARGET_VER }}
+      IS_PR: ${{ steps.set-env.outputs.IS_PR }}
+    steps:
+      - name: Determine Environment and Version
+        id: set-env
+        run: |
+          echo "IS_PR=false" >> $GITHUB_OUTPUT
+          
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            TARGET_BRANCH="${{ github.base_ref }}"
+            echo "TARGET_ENV=${TARGET_BRANCH}" >> $GITHUB_OUTPUT
+            echo "TARGET_VER=pr-${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+            echo "IS_PR=true" >> $GITHUB_OUTPUT
+          
+          elif [[ "${{ github.ref_type }}" == "tag" ]]; then
+            TAG_NAME="${{ github.ref_name }}"
+            if [[ "$TAG_NAME" == *"-rc"* || "$TAG_NAME" == *"-beta"* || "$TAG_NAME" == *"-pre"* ]]; then
+              echo "TARGET_ENV=staging" >> @GITHUB_OUTPUT
+            else
+              echo "TARGET_ENV=prod" >> @GITHUB_OUTPUT
+            fi
+            echo "TARGET_VER=${TAG_NAME}" >> $GITHUB_OUTPUT
+          
+          else
+            BRANCH_NAME="${{ github.ref_name }}"
+            echo "TARGET_ENV=${BRANCH_NAME}" >> $GITHUB_OUTPUT
+            echo "TARGET_VER=${BRANCH_NAME}-${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Display Routing Decision
+        run: |
+          echo "### 🚦 CI Router Decision" >> $GITHUB_STEP_SUMMARY
+          echo "| Key | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Event**      | \`${{ github.event_name }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Ref**        | \`${{ github.ref }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Target Env** | \`${{ steps.set-env.outputs.TARGET_ENV }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Version**    | \`${{ steps.set-env.outputs.TARGET_VER }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Is PR**      | \`${{ steps.set-env.outputs.IS_PR }}\` |" >> $GITHUB_STEP_SUMMARY
+
+  # ============================================================================
+  # Job 2: Build (no tests) and Trigger Jenkins
+  # Runs on the self-hosted runner. Compiles to validate code, then triggers
+  # the Jenkins Docker build pipeline on success (unless this is a PR).
+  #
+  # TODO: Add `mvn clean verify` test step once tests are refactored.
+  # ============================================================================
+  build:
+    needs: router
+    runs-on: self-hosted
+    environment: ${{ needs.router.outputs.TARGET_ENV }}
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v5
+
+      # Compile only — skip tests until they are refactored.
+      - name: Compile with Maven
+        run: mvn clean compile -DskipTests -B
+
+      # Trigger Jenkins for Docker build + push (skip for PRs).
+      - name: Trigger Jenkins Pipline for Docker Build
+        if: success() && needs.router.outputs.IS_PR == 'false'
+        run: |
+          echo "Triggering Jenkins for Env: ${{ needs.router.outputs.TARGET_ENV }}, Version: ${{ needs.router.outputs.TARGET_VER }}"
+          curl -f -sS --retry 3 --retry-delay 5 -X POST \
+            -u "${{ secrets.JENKINS_USER }}:${{ secrets.JENKINS_TOKEN }}" \
+            "http://127.0.0.1:8080/jenkins/job/qc-backend-automation/buildWithParameters" \
+            --data "ENVIRONMENT=${{ needs.router.outputs.TARGET_ENV }}" \
+            --data "VERSION_TAG=${{ needs.router.outputs.TARGET_VER }}" \
+            --data "GIT_COMMIT=${{ github.sha }}"
+
+      - name: Build Summary
+        if: always()
+        run: |
+          echo "### 📦 Build Result" >> $GITHUB_STEP_SUMMARY
+          echo "| Key | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Environment** | \`${{ needs.router.outputs.TARGET_ENV }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Version**     | \`${{ needs.router.outputs.TARGET_VER }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Commit**      | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Jenkins Triggered** | \`${{ needs.router.outputs.IS_PR == 'false' && 'Yes' || 'No (PR)' }}\` |" >> $GITHUB_STEP_SUMMARY
