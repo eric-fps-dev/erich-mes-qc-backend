@@ -17,7 +17,8 @@ public class SecurityConstants {
     public static final String[] SYSTEM_WHITELIST = {
             "/actuator/health",
             "/auth/callback",
-            "/auth/refresh"
+            "/auth/refresh",
+            "/ws-qc/**"
     };
 }
 
