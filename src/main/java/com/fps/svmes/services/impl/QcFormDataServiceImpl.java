@@ -15,6 +15,7 @@ import com.fps.svmes.enums.form.FormSubmissionState;
 import com.fps.svmes.models.nosql.approval.ApprovalInstance;
 import com.fps.svmes.models.nosql.approval.FormSubmissionSnapshotForFilter;
 import com.fps.svmes.models.nosql.approval.ApprovalInstanceStep;
+import com.fps.svmes.dto.dtos.websocket.QcRecordEvent;
 import com.fps.svmes.services.ApprovalInfoGeneratorService;
 import com.fps.svmes.services.ApprovalInstanceService;
 import com.fps.svmes.services.ControlLimitEvaluationService;
@@ -22,6 +23,7 @@ import com.fps.svmes.services.FormNotificationConfigService;
 import com.fps.svmes.services.QcFormDataService;
 import com.fps.svmes.services.QcFormTemplateService;
 import com.fps.svmes.services.QcSnapshotSubmissionService;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import com.fps.svmes.exceptions.ApprovalInstanceException;
 import com.fps.svmes.exceptions.InvalidRequestException;
 import com.fps.svmes.utils.MongoFormTemplateUtils;
@@ -67,6 +69,7 @@ public class QcFormDataServiceImpl implements QcFormDataService {
     private final ApprovalInstanceService approvalInstanceService;
     private final FormNotificationConfigService formNotificationConfigService;
     private final FormSubmissionIndexManager formSubmissionIndexManager;
+    private final SimpMessagingTemplate messagingTemplate;
 
     @Override
     public Map<String, Object> insertFormData(String collectionName, Long userId, Map<String, Object> formData, boolean submitForApproval) {
@@ -148,6 +151,13 @@ public class QcFormDataServiceImpl implements QcFormDataService {
             response.put("warnings", warnings);
         }
         response.put("message", "Form data inserted successfully to " + collectionName);
+
+        try {
+            messagingTemplate.convertAndSend("/topic/qc-records/" + formTemplateId, new QcRecordEvent(formTemplateId, collectionName));
+        } catch (Exception wsEx) {
+            log.warn("WebSocket broadcast failed for templateId={}: {}", formTemplateId, wsEx.getMessage());
+        }
+
         return response;
     }
 
