@@ -97,7 +97,8 @@ jobs:
           CRUMB=$(curl -sf -u "${{ secrets.JENKINS_USER }}:${{ secrets.JENKINS_TOKEN }}" \
             "http://127.0.0.1:8080/jenkins/crumbIssuer/api/json" \
             | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['crumbRequestField']+':'+d['crumb'])")
-          curl -f -sS --retry 3 --retry-delay 5 -X POST \
+          echo "Crumb: ${CRUMB}"
+          curl -v --retry 3 --retry-delay 5 -X POST \
             -u "${{ secrets.JENKINS_USER }}:${{ secrets.JENKINS_TOKEN }}" \
             -H "${CRUMB}" \
             "http://127.0.0.1:8080/jenkins/job/qc-backend-automation/buildWithParameters" \
