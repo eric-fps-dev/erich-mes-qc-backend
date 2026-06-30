@@ -102,19 +102,14 @@ public class QcTaskSubmissionLogsServiceImpl implements QcTaskSubmissionLogsServ
                 throw new IllegalArgumentException("Invalid submissionId format");
             }
 
-            // Determine collection name
+            // Determine collection name from ObjectId timestamp (UTC) to avoid timezone skew
             String collectionName = inputCollectionName.orElseGet(() -> {
-                String yearMonth = OffsetDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMM"));
+                Instant ts = new ObjectId(submissionId).getDate().toInstant();
+                String yearMonth = ts.atZone(ZoneOffset.UTC).format(DateTimeFormatter.ofPattern("yyyyMM"));
                 return "form_template_" + formId + "_" + yearMonth;
             });
 
             logger.info("Looking in collection: {}", collectionName);
-
-            // Check if collection exists
-            if (!mongoTemplate.collectionExists(collectionName)) {
-                logger.error("Collection does not exist: {}", collectionName);
-                throw new RuntimeException("Collection not found: " + collectionName);
-            }
 
             // Construct the MongoDB query
             Query query = new Query();
@@ -122,10 +117,20 @@ public class QcTaskSubmissionLogsServiceImpl implements QcTaskSubmissionLogsServ
 
             logger.info("Constructed query: {}", query);
 
-            // Execute the query and fetch the document
-            Document document = mongoTemplate.findOne(query, Document.class, collectionName);
+            // Execute the query; if not found, search adjacent monthly collections
+            Document document = mongoTemplate.collectionExists(collectionName)
+                    ? mongoTemplate.findOne(query, Document.class, collectionName)
+                    : null;
 
-            // adjust the document to categorize the results according to the form template
+            if (document == null) {
+                String adjacent = findInAdjacentCollections(submissionId, formId, collectionName);
+                if (adjacent != null) {
+                    logger.warn("Document {} not in {} — found in adjacent collection {}", submissionId, collectionName, adjacent);
+                    collectionName = adjacent;
+                    document = mongoTemplate.findOne(query, Document.class, collectionName);
+                }
+            }
+
             if (document == null) {
                 logger.warn("No document found for submissionId: {}", submissionId);
                 return null;
@@ -605,17 +610,22 @@ public class QcTaskSubmissionLogsServiceImpl implements QcTaskSubmissionLogsServ
     @Override
     @org.springframework.transaction.annotation.Transactional("transactionManager")
     public void deleteSubmissionLog(String submissionId, @NonNull String collectionName) {
-        // 1. Check if collection exists
-        if (!mongoTemplate.collectionExists(collectionName)) {
-            throw new RuntimeException("Collection not found: " + collectionName);
-        }
-
-        // 2. Find the document by _id
+        // 1. Find the document, falling back to adjacent monthly collections if needed
         ObjectId oid = new ObjectId(submissionId);
         Query idQuery = new Query(Criteria.where("_id").is(oid));
-        Document document = mongoTemplate.findOne(idQuery, Document.class, collectionName);
+        Document document = mongoTemplate.collectionExists(collectionName)
+                ? mongoTemplate.findOne(idQuery, Document.class, collectionName)
+                : null;
 
-        // 3. Check if it exists
+        if (document == null) {
+            String adjacent = findInAdjacentCollections(submissionId, null, collectionName);
+            if (adjacent != null) {
+                logger.warn("Delete: document {} not in {} — found in adjacent collection {}", submissionId, collectionName, adjacent);
+                collectionName = adjacent;
+                document = mongoTemplate.findOne(idQuery, Document.class, collectionName);
+            }
+        }
+
         if (document == null) {
             throw new RuntimeException("Document not found: " + submissionId);
         }
@@ -670,12 +680,18 @@ public class QcTaskSubmissionLogsServiceImpl implements QcTaskSubmissionLogsServ
             throw new IllegalArgumentException("Invalid submissionId format: " + submissionId);
         }
 
-        if (!mongoTemplate.collectionExists(collectionName)) {
-            throw new RuntimeException("Collection not found: " + collectionName);
-        }
-
         Query query = new Query(Criteria.where("_id").is(new ObjectId(submissionId)));
-        Document rawDocument = mongoTemplate.findOne(query, Document.class, collectionName);
+        Document rawDocument = mongoTemplate.collectionExists(collectionName)
+                ? mongoTemplate.findOne(query, Document.class, collectionName)
+                : null;
+
+        if (rawDocument == null) {
+            String adjacent = findInAdjacentCollections(submissionId, null, collectionName);
+            if (adjacent != null) {
+                logger.warn("getRaw: document {} not in {} — found in adjacent collection {}", submissionId, collectionName, adjacent);
+                rawDocument = mongoTemplate.findOne(query, Document.class, adjacent);
+            }
+        }
 
         if (rawDocument == null) {
             return null;
@@ -908,5 +924,30 @@ public class QcTaskSubmissionLogsServiceImpl implements QcTaskSubmissionLogsServ
         }
     }
 
+    /**
+     * When a document is not found in the expected monthly collection (due to timezone skew
+     * at the moment of submission), search the adjacent ±2 monthly shards and return the
+     * first collection name that contains the document, or null if none found.
+     */
+    private String findInAdjacentCollections(String submissionId, Long formId, String primaryCollection) {
+        int lastUnderscore = primaryCollection.lastIndexOf('_');
+        if (lastUnderscore < 0) return null;
+        String prefix = primaryCollection.substring(0, lastUnderscore + 1);
+        String yearMonthStr = primaryCollection.substring(lastUnderscore + 1);
+        if (yearMonthStr.length() != 6) return null;
 
+        int year = Integer.parseInt(yearMonthStr.substring(0, 4));
+        int month = Integer.parseInt(yearMonthStr.substring(4, 6));
+        YearMonth base = YearMonth.of(year, month);
+
+        Query query = new Query(Criteria.where("_id").is(new ObjectId(submissionId)));
+        for (int delta : new int[]{1, -1, 2, -2}) {
+            YearMonth candidate = base.plusMonths(delta);
+            String colName = prefix + candidate.format(DateTimeFormatter.ofPattern("yyyyMM"));
+            if (!mongoTemplate.collectionExists(colName)) continue;
+            Document found = mongoTemplate.findOne(query, Document.class, colName);
+            if (found != null) return colName;
+        }
+        return null;
+    }
 }
