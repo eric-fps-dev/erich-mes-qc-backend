@@ -80,3 +80,6 @@ qc:
   snapshot:
     api:
       url: ${QC_SNAPSHOT_API_URL}
+  approval-template:
+    mongodb:
+      database: ${APPROVAL_TEMPLATE_MONGODB_DATABASE:mes}
