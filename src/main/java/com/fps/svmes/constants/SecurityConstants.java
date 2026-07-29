@@ -20,5 +20,12 @@ public class SecurityConstants {
             "/auth/refresh",
             "/ws-qc/**"
     };
+
+    // Public WHITELIST - anonymous, unauthenticated form fill-in links.
+    // Keep this scoped to PublicQcFormController only; do not widen it to
+    // cover any other controller's paths.
+    public static final String[] PUBLIC_WHITELIST = {
+            "/public/qc-forms/**"
+    };
 }
 
