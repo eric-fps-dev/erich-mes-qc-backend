@@ -37,6 +37,7 @@ public class SecurityConfig {
 /*                                .anyRequest().permitAll()*/
                                 .requestMatchers(SecurityConstants.SWAGGER_WHITELIST).permitAll()
                                 .requestMatchers(SecurityConstants.SYSTEM_WHITELIST).permitAll()
+                                .requestMatchers(SecurityConstants.PUBLIC_WHITELIST).permitAll()
                                 .anyRequest().authenticated()
                 )
                 .oauth2ResourceServer(oauth2 -> oauth2
