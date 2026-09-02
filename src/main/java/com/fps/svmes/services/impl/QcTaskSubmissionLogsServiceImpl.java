@@ -136,7 +136,9 @@ public class QcTaskSubmissionLogsServiceImpl implements QcTaskSubmissionLogsServ
                 return null;
             }
 
+/*
             logger.info("Document retrieved successfully: {}", document);
+*/
             return formattedResult(document, formId);
 
         } catch (Exception e) {
