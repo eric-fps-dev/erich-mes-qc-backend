@@ -20,9 +20,10 @@ spring:
       minimum-idle: 10          # Minimum number of idle connections in the pool
       maximum-pool-size: 20     # Maximum number of connections (active + idle)
       idle-timeout: 30000       # 30 seconds - Time a connection can remain idle before being closed
-      max-lifetime: 1800000      # 30 minutes - Maximum lifetime of a connection
+      max-lifetime: 900000      # 15 minutes - Maximum lifetime of a connection
       leak-detection-threshold: 60000  # 60 seconds - Time a connection can be borrowed before flagged as leaked
       connection-timeout: 45000 # 45 seconds - Time to wait for a new connection before timing out
+      keepalive-time: 30000
 
   mail:
     host: ${SMTP_HOST}
@@ -65,6 +66,10 @@ management:
   health:
     mail:
       enabled: false
+    rabbit:
+      enabled: false
+    db:
+      enabled: true
   endpoints:
     web:
       exposure:

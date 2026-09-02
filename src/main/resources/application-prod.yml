@@ -15,13 +15,13 @@ spring:
       port: ${REDIS_PORT}
       ssl:
         enabled: true
-      timeout: 5000ms
+      timeout: 10000ms
       lettuce:
         pool:
-          max-active: 16
-          max-idle: 8
-          min-idle: 2
-          max-wait: 3000ms
+          max-active: 32
+          max-idle: 16
+          min-idle: 4
+          max-wait: 5000ms
           time-between-eviction-runs: 30000ms
 
   rabbitmq:
@@ -31,6 +31,7 @@ spring:
     password: ${RABBITMQ_PASSWORD}
     ssl:
       enabled: true
+    requested-heartbeat: 30
 
   security:
     oauth2:
